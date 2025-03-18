@@ -75,6 +75,12 @@
             // Create the connector object
             var myConnector = tableau.makeConnector();
             
+            // Set authentication type
+            myConnector.init = function(initCallback) {
+                tableau.authType = tableau.authTypeEnum.custom;
+                initCallback();
+            };
+            
             // Define the schema
             myConnector.getSchema = function(schemaCallback) {
                 var cols = [{
@@ -148,12 +154,10 @@
             
             // Download the data
             myConnector.getData = function(table, doneCallback) {
-                // Get the connection data
-                var connData = JSON.parse(tableau.connectionData);
-                var client_id = connData.client_id;
-                var client_secret = connData.client_secret;
-                var start_date = connData.start_date;
-                var end_date = connData.end_date;
+                var client_id = tableau.username;
+                var client_secret = tableau.password;
+                var start_date = tableau.connectionData.start_date;
+                var end_date = tableau.connectionData.end_date;
                 
                 console.log("Authenticating with:", {
                     client_id: client_id,
@@ -166,7 +170,7 @@
                 $.ajax({
                     url: "https://auth.sensourceinc.com/oauth/token",
                     type: "POST",
-                    contentType: "application/x-www-form-urlencoded", // Changed from application/json
+                    contentType: "application/x-www-form-urlencoded",
                     data: {
                         grant_type: "client_credentials",
                         client_id: client_id,
@@ -263,15 +267,16 @@
                     var startISOString = startDateObj.toISOString();
                     var endISOString = endDateObj.toISOString();
                     
-                    // Store the credentials in connectionData
-                    var connectionData = {
-                        client_id: client_id,
-                        client_secret: client_secret,
+                    // Store the credentials in tableau.username and tableau.password
+                    tableau.username = client_id;
+                    tableau.password = client_secret;
+                    
+                    // Store dates in connectionData
+                    tableau.connectionData = JSON.stringify({
                         start_date: startISOString,
                         end_date: endISOString
-                    };
+                    });
                     
-                    tableau.connectionData = JSON.stringify(connectionData);
                     tableau.connectionName = "Library Traffic Data";
                     tableau.submit();
                 });
