@@ -156,7 +156,7 @@
                 $.ajax({
                     url: "https://auth.sensourceinc.com/oauth/token",
                     type: "POST",
-                    contentType: "application/json", // Match Python script
+                    contentType: "application/json",
                     data: JSON.stringify({
                         grant_type: "client_credentials",
                         client_id: client_id,
