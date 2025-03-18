@@ -49,16 +49,6 @@
     <div id="errorMsg"></div>
     
     <div class="form-group">
-        <label for="client_id">Client ID:</label>
-        <input type="text" id="client_id">
-    </div>
-    
-    <div class="form-group">
-        <label for="client_secret">Client Secret:</label>
-        <input type="password" id="client_secret">
-    </div>
-    
-    <div class="form-group">
         <label for="start_date">Start Date (YYYY-MM-DD):</label>
         <input type="text" id="start_date" value="2025-02-01">
     </div>
@@ -74,12 +64,6 @@
         (function() {
             // Create the connector object
             var myConnector = tableau.makeConnector();
-            
-            // Set authentication type
-            myConnector.init = function(initCallback) {
-                tableau.authType = tableau.authTypeEnum.custom;
-                initCallback();
-            };
             
             // Define the schema
             myConnector.getSchema = function(schemaCallback) {
@@ -154,8 +138,10 @@
             
             // Download the data
             myConnector.getData = function(table, doneCallback) {
-                var client_id = tableau.username;
-                var client_secret = tableau.password;
+                // Hardcoded credentials for testing
+                var client_id = 'd301bb92-9de7-43bb-b5fd-da0468122f78';
+                var client_secret = 'dff55e62-da91-4417-bad5-8d8cbb1ccc7d';
+                
                 var start_date = tableau.connectionData.start_date;
                 var end_date = tableau.connectionData.end_date;
                 
@@ -170,12 +156,12 @@
                 $.ajax({
                     url: "https://auth.sensourceinc.com/oauth/token",
                     type: "POST",
-                    contentType: "application/x-www-form-urlencoded",
-                    data: {
+                    contentType: "application/json", // Match Python script
+                    data: JSON.stringify({
                         grant_type: "client_credentials",
                         client_id: client_id,
                         client_secret: client_secret
-                    },
+                    }),
                     success: function(authResponse) {
                         console.log("Authentication successful:", authResponse);
                         var access_token = authResponse.access_token;
@@ -185,6 +171,7 @@
                             url: "https://vea.sensourceinc.com/api/data/traffic",
                             type: "GET",
                             headers: {
+                                "Content-Type": "application/json",
                                 "Authorization": "Bearer " + access_token
                             },
                             data: {
@@ -240,17 +227,10 @@
             // Setup the click handler for the button
             $(document).ready(function() {
                 $("#submitButton").click(function() {
-                    var client_id = $('#client_id').val().trim();
-                    var client_secret = $('#client_secret').val().trim();
                     var start_date = $('#start_date').val().trim();
                     var end_date = $('#end_date').val().trim();
                     
                     // Validate inputs
-                    if (!client_id || !client_secret) {
-                        $('#errorMsg').html("Please enter both Client ID and Client Secret");
-                        return;
-                    }
-                    
                     function isValidDate(dateStr) {
                         var d = new Date(dateStr);
                         return !isNaN(d.getTime());
@@ -266,10 +246,6 @@
                     var endDateObj = new Date(end_date);
                     var startISOString = startDateObj.toISOString();
                     var endISOString = endDateObj.toISOString();
-                    
-                    // Store the credentials in tableau.username and tableau.password
-                    tableau.username = client_id;
-                    tableau.password = client_secret;
                     
                     // Store dates in connectionData
                     tableau.connectionData = JSON.stringify({
