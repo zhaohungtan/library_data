@@ -155,17 +155,25 @@
                 var start_date = connData.start_date;
                 var end_date = connData.end_date;
                 
+                console.log("Authenticating with:", {
+                    client_id: client_id,
+                    client_secret: client_secret,
+                    start_date: start_date,
+                    end_date: end_date
+                });
+                
                 // First get the access token
                 $.ajax({
                     url: "https://auth.sensourceinc.com/oauth/token",
                     type: "POST",
-                    contentType: "application/json",
-                    data: JSON.stringify({
-                        "grant_type": "client_credentials",
-                        "client_id": client_id,
-                        "client_secret": client_secret
-                    }),
+                    contentType: "application/x-www-form-urlencoded", // Changed from application/json
+                    data: {
+                        grant_type: "client_credentials",
+                        client_id: client_id,
+                        client_secret: client_secret
+                    },
                     success: function(authResponse) {
+                        console.log("Authentication successful:", authResponse);
                         var access_token = authResponse.access_token;
                         
                         // Then get the traffic data
@@ -173,17 +181,17 @@
                             url: "https://vea.sensourceinc.com/api/data/traffic",
                             type: "GET",
                             headers: {
-                                "Content-Type": "application/json",
                                 "Authorization": "Bearer " + access_token
                             },
                             data: {
-                                "relativeDate": "custom",
-                                "startDate": start_date,
-                                "endDate": end_date,
-                                "dateGroupings": "hour",
-                                "entityType": "zone"
+                                relativeDate: "custom",
+                                startDate: start_date,
+                                endDate: end_date,
+                                dateGroupings: "hour",
+                                entityType: "zone"
                             },
                             success: function(resp) {
+                                console.log("Data retrieval successful:", resp);
                                 var results = resp.results;
                                 var tableData = [];
                                 
@@ -198,11 +206,11 @@
                                     var dateTime = new Date(dateTimeStr);
                                     
                                     tableData.push({
-                                        "dateTime": dateTime,
-                                        "entrance": entranceName,
-                                        "facility": facility,
-                                        "entries": parseInt(item.sumins) || 0,
-                                        "exits": parseInt(item.sumouts) || 0
+                                        dateTime: dateTime,
+                                        entrance: entranceName,
+                                        facility: facility,
+                                        entries: parseInt(item.sumins) || 0,
+                                        exits: parseInt(item.sumouts) || 0
                                     });
                                 }
                                 
@@ -210,12 +218,14 @@
                                 doneCallback();
                             },
                             error: function(xhr, status, error) {
-                                tableau.abortWithError("Error fetching traffic data: " + error);
+                                console.error("Error fetching traffic data:", error, xhr.responseText);
+                                tableau.abortWithError("Error fetching traffic data: " + error + " - " + xhr.responseText);
                             }
                         });
                     },
                     error: function(xhr, status, error) {
-                        tableau.abortWithError("Authentication failed: " + error);
+                        console.error("Authentication failed:", error, xhr.responseText);
+                        tableau.abortWithError("Authentication failed: " + error + " - " + xhr.responseText);
                     }
                 });
             };
@@ -239,7 +249,7 @@
                     
                     function isValidDate(dateStr) {
                         var d = new Date(dateStr);
-                        return !isNaN(d.getDate());
+                        return !isNaN(d.getTime());
                     }
                     
                     if (!isValidDate(start_date) || !isValidDate(end_date)) {
@@ -255,10 +265,10 @@
                     
                     // Store the credentials in connectionData
                     var connectionData = {
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                        "start_date": startISOString,
-                        "end_date": endISOString
+                        client_id: client_id,
+                        client_secret: client_secret,
+                        start_date: startISOString,
+                        end_date: endISOString
                     };
                     
                     tableau.connectionData = JSON.stringify(connectionData);
