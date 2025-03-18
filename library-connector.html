@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Library Traffic Data Connector</title>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <!-- jQuery -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    
+    <!-- Tableau WDC Library -->
+    <script src="https://connectors.tableau.com/libs/tableauwdc-2.3.latest.js"></script>
+    
+    <!-- Bootstrap -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css">
+    
+    <style>
+        body {
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 600px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Library Traffic Data Connector</h1>
+        <p>This connector allows you to import library traffic data into Tableau.</p>
+        
+        <form id="inputForm">
+            <div class="form-group">
+                <label for="client_id">Client ID:</label>
+                <input type="text" class="form-control" id="client_id">
+            </div>
+            
+            <div class="form-group">
+                <label for="client_secret">Client Secret:</label>
+                <input type="password" class="form-control" id="client_secret">
+            </div>
+            
+            <div class="form-group">
+                <label for="start_date">Start Date:</label>
+                <input type="datetime-local" class="form-control" id="start_date">
+            </div>
+            
+            <div class="form-group">
+                <label for="end_date">End Date:</label>
+                <input type="datetime-local" class="form-control" id="end_date">
+            </div>
+            
+            <button type="button" id="submitButton" class="btn btn-primary">Get Data</button>
+        </form>
+    </div>
+
+    <script>
+        (function() {
+            // Create the connector object
+            var myConnector = tableau.makeConnector();
+            
+            // Define the schema
+            myConnector.getSchema = function(schemaCallback) {
+                var cols = [{
+                    id: "dateTime",
+                    alias: "Date-Time",
+                    dataType: tableau.dataTypeEnum.datetime
+                }, {
+                    id: "entrance",
+                    alias: "Entrance",
+                    dataType: tableau.dataTypeEnum.string
+                }, {
+                    id: "facility",
+                    alias: "Facility",
+                    dataType: tableau.dataTypeEnum.string
+                }, {
+                    id: "entries",
+                    alias: "Entries",
+                    dataType: tableau.dataTypeEnum.int
+                }, {
+                    id: "exits",
+                    alias: "Exits",
+                    dataType: tableau.dataTypeEnum.int
+                }];
+
+                var tableSchema = {
+                    id: "libraryTrafficData",
+                    alias: "Library Traffic Data",
+                    columns: cols
+                };
+
+                schemaCallback([tableSchema]);
+            };
+
+            // Define the facility mapping
+            var facilityMapping = {
+                'AHC Back': 'AHC Library',
+                'AHC Front': 'AHC Library',
+                'AHC Rear': 'AHC Library',
+                'ANTH': 'ANTH Library',
+                'Bancroft': 'BANC Library',
+                'CHEM': 'CHEM Library',
+                'VLSB1': 'BIOS Library',
+                'VLSB2': 'BIOS Library',
+                'EAL': 'EAL Library',
+                'CHEM 2.9': 'CHEM Library',
+                'Doe North': 'DOE Library',
+                'Doe South': 'DOE Library',
+                'HAAS 2nd Floor': 'HAAS Library',
+                'HAAS 3rd Floor': 'HAAS Library',
+                'MATH': 'MATH Library',
+                'Moffit Corridor': 'DOE STACKS',
+                'Stacks East': 'DOE STACKS',
+                'EAL 2.9': 'EAL Library',
+                'Earth North': 'EART Library',
+                'Earth South': 'EART Library',
+                'ENGI': 'ENGI Library',
+                'ENVI': 'ENVI Library',
+                'GRAD': 'GRDS Library',
+                'Math 2.9': 'MATH Library',
+                'Moffit Entry': 'MOFF Library',
+                'Moffitt Exit': 'MOFF Library',
+                'Moffitt 4th': 'MOFF Library',
+                'Morrison': 'MORR Library',
+                'MUSI': 'MUSI',
+                'News': 'NEWS Library',
+                'OPTO': 'OPTO Library',
+                'PHYS': 'PHYS Library',
+                'SEAL': 'SEAL Library',
+                'SOCR': 'SOCR Library'
+            };
+            
+            // Download the data
+            myConnector.getData = function(table, doneCallback) {
+                // Get the credentials directly from the password store
+                // This securely retrieves credentials saved during the interactive phase
+                var client_id = tableau.password.client_id;
+                var client_secret = tableau.password.client_secret;
+                var start_date = tableau.password.start_date;
+                var end_date = tableau.password.end_date;
+                
+                // First get the access token
+                $.ajax({
+                    url: "https://auth.sensourceinc.com/oauth/token",
+                    type: "POST",
+                    contentType: "application/json",
+                    data: JSON.stringify({
+                        "grant_type": "client_credentials",
+                        "client_id": client_id,
+                        "client_secret": client_secret
+                    }),
+                    success: function(authResponse) {
+                        var access_token = authResponse.access_token;
+                        
+                        // Then get the traffic data
+                        $.ajax({
+                            url: "https://vea.sensourceinc.com/api/data/traffic",
+                            type: "GET",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": "Bearer " + access_token
+                            },
+                            data: {
+                                "relativeDate": "custom",
+                                "startDate": start_date,
+                                "endDate": end_date,
+                                "dateGroupings": "hour",
+                                "entityType": "zone"
+                            },
+                            success: function(resp) {
+                                var results = resp.results;
+                                var tableData = [];
+                                
+                                // Process each row of data
+                                for (var i = 0; i < results.length; i++) {
+                                    var item = results[i];
+                                    var entranceName = item.name;
+                                    var facility = facilityMapping[entranceName] || 'Unmapped';
+                                    
+                                    // Parse date and convert to local time
+                                    var dateTimeStr = item.recordDate_hour_1;
+                                    var dateTime = new Date(dateTimeStr);
+                                    
+                                    tableData.push({
+                                        "dateTime": dateTime,
+                                        "entrance": entranceName,
+                                        "facility": facility,
+                                        "entries": parseInt(item.sumins) || 0,
+                                        "exits": parseInt(item.sumouts) || 0
+                                    });
+                                }
+                                
+                                table.appendRows(tableData);
+                                doneCallback();
+                            },
+                            error: function(xhr, status, error) {
+                                tableau.abortWithError("Error fetching traffic data: " + error);
+                            }
+                        });
+                    },
+                    error: function(xhr, status, error) {
+                        tableau.abortWithError("Authentication failed: " + error);
+                    }
+                });
+            };
+
+            // Define what happens when the connector is initialized
+            myConnector.init = function(initCallback) {
+                tableau.authType = tableau.authTypeEnum.custom;
+                
+                // If we are in the auth phase, we only want to show the UI needed for auth
+                if (tableau.phase == tableau.phaseEnum.authPhase) {
+                    $("#inputForm").css("display", "block");
+                } else {
+                    $("#inputForm").css("display", "none");
+                }
+                
+                initCallback();
+            };
+
+            // Register the connector
+            tableau.registerConnector(myConnector);
+            
+            // Event listeners for when the user submits the form
+            $(document).ready(function() {
+                $("#submitButton").click(function() {
+                    var client_id = $('#client_id').val().trim();
+                    var client_secret = $('#client_secret').val().trim();
+                    var start_date = new Date($('#start_date').val());
+                    var end_date = new Date($('#end_date').val());
+                    
+                    // Validate form inputs
+                    if (!client_id || !client_secret) {
+                        alert("Please enter both Client ID and Client Secret");
+                        return;
+                    }
+                    
+                    if (!start_date || !end_date) {
+                        alert("Please select both start and end dates");
+                        return;
+                    }
+                    
+                    // Format dates for API (ISO format)
+                    var startDateStr = start_date.toISOString();
+                    var endDateStr = end_date.toISOString();
+                    
+                    // Store the data in the password store - this is secure and not exposed
+                    tableau.password = {
+                        client_id: client_id,
+                        client_secret: client_secret,
+                        start_date: startDateStr,
+                        end_date: endDateStr
+                    };
+                    
+                    // Set the name of the data source
+                    tableau.connectionName = "Library Traffic Data";
+                    
+                    // Submit to Tableau - trigger the auth flow
+                    tableau.submit();
+                });
+            });
+        })();
+    </script>
+</body>
+</html>
