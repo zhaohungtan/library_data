@@ -1,177 +1,47 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Library Traffic Data Connector</title>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    
-    <!-- Import the Tableau WDC library -->
-    <script src="https://connectors.tableau.com/libs/tableauwdc-3.0.latest.js" type="text/javascript"></script>
-    
-    <!-- Simple styling -->
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        button {
-            padding: 10px 15px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        #loadingIndicator {
-            margin-top: 10px;
-        }
-    </style>
+    <script src="https://connectors.tableau.com/libs/tableauwdc-2.3.latest.js"></script>
 </head>
-
 <body>
-    <h1>Library Traffic Data Connector</h1>
-    
-    <button type="button" id="submitButton">Retrieve Data</button>
-    <div id="loadingIndicator">Loading...</div>
-
     <script>
-        (function() {
-            // Create the connector object
-            var myConnector = tableau.makeConnector();
-            
-            // Define the schema
-            myConnector.getSchema = function(schemaCallback) {
-                var cols = [{
-                    id: "dateTime",
-                    alias: "Date-Time",
-                    dataType: tableau.dataTypeEnum.datetime
-                }, {
-                    id: "entrance",
-                    alias: "Entrance",
-                    dataType: tableau.dataTypeEnum.string
-                }, {
-                    id: "facility",
-                    alias: "Facility",
-                    dataType: tableau.dataTypeEnum.string
-                }, {
-                    id: "entries",
-                    alias: "Entries",
-                    dataType: tableau.dataTypeEnum.int
-                }, {
-                    id: "exits",
-                    alias: "Exits",
-                    dataType: tableau.dataTypeEnum.int
-                }];
+        const connector = tableau.makeConnector();
+        
+        const CLIENT_ID = "d301bb92-9de7-43bb-b5fd-da0468122f78";
+        const CLIENT_SECRET = "dff55e62-da91-4417-bad5-8d8cbb1ccc7d";
 
-                var tableSchema = {
-                    id: "libraryTraffic",
-                    alias: "Library Traffic Data",
-                    columns: cols
-                };
-
-                schemaCallback([tableSchema]);
-            };
-
-            // Download the data
-            myConnector.getData = function(table, doneCallback) {
-                var client_id = "dff55e62-da91-4417-bad5-8d8cbb1ccc7d";
-                var client_secret = "your_client_secret_here"; // Replace with actual secret
-                var start_date = "2023-01-01";
-                var end_date = "2023-12-31";
-
-                // First get the access token
-                $.ajax({
-                    url: "https://auth.sensourceinc.com/oauth/token",
-                    type: "POST",
-                    contentType: "application/x-www-form-urlencoded",
-                    data: {
-                        grant_type: "client_credentials",
-                        client_id: client_id,
-                        client_secret: client_secret
-                    },
-                    success: function(authResponse) {
-                        var access_token = authResponse.access_token;
-                        
-                        // Then get the traffic data
-                        $.ajax({
-                            url: "https://vea.sensourceinc.com/api/data/traffic",
-                            type: "GET",
-                            headers: {
-                                "Authorization": "Bearer " + access_token
-                            },
-                            data: {
-                                relativeDate: "custom",
-                                startDate: start_date,
-                                endDate: end_date,
-                                dateGroupings: "hour",
-                                entityType: "zone"
-                            },
-                            success: function(resp) {
-                                var results = resp.results || [];
-                                var tableData = [];
-                                
-                                // Process each row of data
-                                for (var i = 0; i < results.length; i++) {
-                                    var item = results[i];
-                                    var entranceName = item.name;
-                                    
-                                    // Simple facility mapping
-                                    var facility = entranceName.split(' ')[0] || 'Unmapped';
-                                    
-                                    // Parse date
-                                    var dateTimeStr = item.recordDate_hour_1;
-                                    var dateTime = new Date(dateTimeStr);
-                                    
-                                    // Only add valid records
-                                    if (!isNaN(dateTime.getTime())) {
-                                        tableData.push({
-                                            "dateTime": dateTime,
-                                            "entrance": entranceName,
-                                            "facility": facility,
-                                            "entries": parseInt(item.sumins) || 0,
-                                            "exits": parseInt(item.sumouts) || 0
-                                        });
-                                    }
-                                }
-                                
-                                // Append data
-                                table.appendRows(tableData);
-                                doneCallback();
-                            },
-                            error: function(xhr, status, error) {
-                                tableau.abortWithError("Error fetching traffic data: " + error);
-                            }
-                        });
-                    },
-                    error: function(xhr, status, error) {
-                        tableau.abortWithError("Authentication failed: " + error);
-                    }
-                });
-            };
-
-            // Register the connector
-            tableau.registerConnector(myConnector);
-            
-            // Setup the click handler for the button
-            $(document).ready(function() {
-                $("#submitButton").click(function() {
-                    // Show loading indicator
-                    $('#loadingIndicator').show();
-                    
-                    // Store the credentials in connectionData
-                    var connectionData = {
-                        "client_id": "dff55e62-da91-4417-bad5-8d8cbb1ccc7d",
-                        "client_secret": "your_client_secret_here",
-                        "start_date": "2023-01-01",
-                        "end_date": "2023-12-31"
-                    };
-                    
-                    tableau.connectionData = JSON.stringify(connectionData);
-                    tableau.connectionName = "Library Traffic Data";
+        connector.getData = function(table) {
+            // 1. Get token directly in browser (INSECURE)
+            fetch("https://auth.sensourceinc.com/oauth/token", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    grant_type: "client_credentials",
+                    client_id: CLIENT_ID,
+                    client_secret: CLIENT_SECRET
+                })
+            })
+            .then(r => r.json())
+            .then(token => {
+                // 2. Fetch data directly
+                fetch("https://vea.sensourceinc.com/api/data/traffic?start=2024-01-01&end=2024-01-02", {
+                    headers: {"Authorization": "Bearer " + token.access_token}
+                })
+                .then(r => r.json())
+                .then(data => {
+                    table.appendRows(data.results.map(item => ({
+                        datetime: new Date(item.recordDate_hour_1),
+                        entrance: item.name,
+                        entries: item.sumins
+                    })));
                     tableau.submit();
                 });
             });
-        })();
+        };
+
+        tableau.registerConnector(connector);
+        tableau.connectionName = "Insecure Demo";
+        tableau.submit();
     </script>
 </body>
 </html>
