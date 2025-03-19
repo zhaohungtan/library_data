@@ -41,6 +41,10 @@
             color: red;
             margin-bottom: 10px;
         }
+        .loading {
+            display: none;
+            margin-top: 10px;
+        }
     </style>
 </head>
 
@@ -60,15 +64,16 @@
     
     <div class="form-group">
         <label for="start_date">Start Date (YYYY-MM-DD):</label>
-        <input type="text" id="start_date" value="2025-02-01">
+        <input type="date" id="start_date">
     </div>
     
     <div class="form-group">
         <label for="end_date">End Date (YYYY-MM-DD):</label>
-        <input type="text" id="end_date" value="2025-02-02">
+        <input type="date" id="end_date">
     </div>
     
     <button type="button" id="submitButton">Get Data</button>
+    <div class="loading" id="loadingIndicator">Loading...</div>
 
     <script>
         (function() {
@@ -146,8 +151,35 @@
                 'SOCR': 'SOCR Library'
             };
             
+            // Add initialization function
+            myConnector.init = function(initCallback) {
+                tableau.authType = tableau.authTypeEnum.custom;
+                
+                // If we have auth credentials in the data, we're in the data gathering phase
+                if (tableau.phase == tableau.phaseEnum.gatherDataPhase) {
+                    // If connectionData exists, use it
+                    if (tableau.connectionData) {
+                        try {
+                            // Try parsing the connection data
+                            JSON.parse(tableau.connectionData);
+                        } catch (e) {
+                            // If parsing fails, abort
+                            tableau.abortWithError("Invalid connection data");
+                            return;
+                        }
+                    }
+                }
+                
+                initCallback();
+            };
+            
             // Download the data
             myConnector.getData = function(table, doneCallback) {
+                // Show loading indicator if we're in Tableau
+                if (typeof tableau !== 'undefined' && tableau.phase === tableau.phaseEnum.gatherDataPhase) {
+                    tableau.reportProgress("Getting authentication token...");
+                }
+                
                 // Get the connection data
                 var connData = JSON.parse(tableau.connectionData);
                 var client_id = connData.client_id;
@@ -155,11 +187,18 @@
                 var start_date = connData.start_date;
                 var end_date = connData.end_date;
                 
+                // Debug
+                console.log("Connection data:", {
+                    client_id: client_id,
+                    start_date: start_date,
+                    end_date: end_date
+                });
+                
                 // First get the access token
                 $.ajax({
                     url: "https://auth.sensourceinc.com/oauth/token",
                     type: "POST",
-                    contentType: "application/x-www-form-urlencoded", // Changed from application/json
+                    contentType: "application/x-www-form-urlencoded",
                     data: {
                         grant_type: "client_credentials",
                         client_id: client_id,
@@ -167,6 +206,13 @@
                     },
                     success: function(authResponse) {
                         var access_token = authResponse.access_token;
+                        
+                        // Report progress
+                        if (typeof tableau !== 'undefined') {
+                            tableau.reportProgress("Authentication successful. Fetching traffic data...");
+                        }
+                        
+                        console.log("Got access token");
                         
                         // Then get the traffic data
                         $.ajax({
@@ -183,7 +229,14 @@
                                 entityType: "zone"
                             },
                             success: function(resp) {
-                                var results = resp.results;
+                                console.log("API Response:", resp);
+                                
+                                // Report progress
+                                if (typeof tableau !== 'undefined') {
+                                    tableau.reportProgress("Processing data...");
+                                }
+                                
+                                var results = resp.results || [];
                                 var tableData = [];
                                 
                                 // Process each row of data
@@ -192,31 +245,67 @@
                                     var entranceName = item.name;
                                     var facility = facilityMapping[entranceName] || 'Unmapped';
                                     
-                                    // Parse date 
+                                    // Parse date - ensure proper handling of date
                                     var dateTimeStr = item.recordDate_hour_1;
-                                    var dateTime = new Date(dateTimeStr);
+                                    var dateTime;
                                     
-                                    tableData.push({
-                                        "dateTime": dateTime,
-                                        "entrance": entranceName,
-                                        "facility": facility,
-                                        "entries": parseInt(item.sumins) || 0,
-                                        "exits": parseInt(item.sumouts) || 0
-                                    });
+                                    try {
+                                        dateTime = new Date(dateTimeStr);
+                                        // Check if date is valid
+                                        if (isNaN(dateTime.getTime())) {
+                                            console.warn("Invalid date:", dateTimeStr);
+                                            dateTime = null;
+                                        }
+                                    } catch (e) {
+                                        console.error("Date parsing error:", e);
+                                        dateTime = null;
+                                    }
+                                    
+                                    // Only add valid records
+                                    if (dateTime) {
+                                        tableData.push({
+                                            "dateTime": dateTime,
+                                            "entrance": entranceName,
+                                            "facility": facility,
+                                            "entries": parseInt(item.sumins) || 0,
+                                            "exits": parseInt(item.sumouts) || 0
+                                        });
+                                    }
+                                    
+                                    // Report progress periodically
+                                    if (i % 100 === 0 && typeof tableau !== 'undefined') {
+                                        tableau.reportProgress("Processed " + i + " of " + results.length + " records");
+                                    }
                                 }
                                 
-                                table.appendRows(tableData);
+                                console.log("Processed " + tableData.length + " records");
+                                
+                                // Append data in chunks to avoid memory issues
+                                var chunkSize = 1000;
+                                for (var i = 0; i < tableData.length; i += chunkSize) {
+                                    table.appendRows(tableData.slice(i, i + chunkSize));
+                                    
+                                    // Report progress
+                                    if (typeof tableau !== 'undefined') {
+                                        tableau.reportProgress("Appended " + Math.min(i + chunkSize, tableData.length) + " of " + tableData.length + " records");
+                                    }
+                                }
+                                
                                 doneCallback();
                             },
                             error: function(xhr, status, error) {
-                                console.error("Error fetching traffic data:", error, xhr.responseText);
-                                tableau.abortWithError("Error fetching traffic data: " + error + " - " + xhr.responseText);
+                                console.error("Error fetching traffic data:", error);
+                                console.error("Status:", status);
+                                console.error("Response:", xhr.responseText);
+                                tableau.abortWithError("Error fetching traffic data: " + error);
                             }
                         });
                     },
                     error: function(xhr, status, error) {
-                        console.error("Authentication failed:", error, xhr.responseText);
-                        tableau.abortWithError("Authentication failed: " + error + " - " + xhr.responseText);
+                        console.error("Authentication failed:", error);
+                        console.error("Status:", status);
+                        console.error("Response:", xhr.responseText);
+                        tableau.abortWithError("Authentication failed: " + error);
                     }
                 });
             };
@@ -226,6 +315,21 @@
             
             // Setup the click handler for the button
             $(document).ready(function() {
+                // Set today's date as default for end date
+                var today = new Date();
+                var yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                
+                $('#end_date').val(formatDate(today));
+                $('#start_date').val(formatDate(yesterday));
+                
+                function formatDate(date) {
+                    var year = date.getFullYear();
+                    var month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    var day = date.getDate().toString().padStart(2, '0');
+                    return year + '-' + month + '-' + day;
+                }
+                
                 $("#submitButton").click(function() {
                     var client_id = $('#client_id').val().trim();
                     var client_secret = $('#client_secret').val().trim();
@@ -238,21 +342,36 @@
                         return;
                     }
                     
-                    function isValidDate(dateStr) {
-                        var d = new Date(dateStr);
-                        return !isNaN(d.getTime());
-                    }
-                    
-                    if (!isValidDate(start_date) || !isValidDate(end_date)) {
-                        $('#errorMsg').html("Enter valid dates. Format: YYYY-MM-DD");
+                    if (!start_date || !end_date) {
+                        $('#errorMsg').html("Please enter both Start Date and End Date");
                         return;
                     }
                     
-                    // Convert dates to ISO format with time for API
-                    var startDateObj = new Date(start_date);
-                    var endDateObj = new Date(end_date);
-                    var startISOString = startDateObj.toISOString();
-                    var endISOString = endDateObj.toISOString();
+                    // Format dates properly for the API
+                    try {
+                        var startDateObj = new Date(start_date);
+                        var endDateObj = new Date(end_date);
+                        
+                        // Check if dates are valid
+                        if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
+                            $('#errorMsg').html("Please enter valid dates");
+                            return;
+                        }
+                        
+                        // Add time to end date to include the entire day
+                        endDateObj.setHours(23, 59, 59, 999);
+                        
+                        // Format dates for API
+                        var startISOString = startDateObj.toISOString();
+                        var endISOString = endDateObj.toISOString();
+                    } catch (e) {
+                        $('#errorMsg').html("Date error: " + e.message);
+                        return;
+                    }
+                    
+                    // Show loading indicator
+                    $('#loadingIndicator').show();
+                    $('#errorMsg').html("");
                     
                     // Store the credentials in connectionData
                     var connectionData = {
