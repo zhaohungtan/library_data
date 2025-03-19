@@ -15,18 +15,6 @@
             font-family: Arial, sans-serif;
             margin: 20px;
         }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-        }
-        input {
-            width: 100%;
-            padding: 8px;
-            box-sizing: border-box;
-        }
         button {
             padding: 10px 15px;
             background-color: #4CAF50;
@@ -34,12 +22,7 @@
             border: none;
             cursor: pointer;
         }
-        #errorMsg {
-            color: red;
-            margin-bottom: 10px;
-        }
-        .loading {
-            display: none;
+        #loadingIndicator {
             margin-top: 10px;
         }
     </style>
@@ -47,30 +30,9 @@
 
 <body>
     <h1>Library Traffic Data Connector</h1>
-    <div id="errorMsg"></div>
     
-    <div class="form-group">
-        <label for="client_id">Client ID:</label>
-        <input type="text" id="client_id">
-    </div>
-    
-    <div class="form-group">
-        <label for="client_secret">Client Secret:</label>
-        <input type="password" id="client_secret">
-    </div>
-    
-    <div class="form-group">
-        <label for="start_date">Start Date (YYYY-MM-DD):</label>
-        <input type="date" id="start_date">
-    </div>
-    
-    <div class="form-group">
-        <label for="end_date">End Date (YYYY-MM-DD):</label>
-        <input type="date" id="end_date">
-    </div>
-    
-    <button type="button" id="submitButton">Get Data</button>
-    <div class="loading" id="loadingIndicator">Loading...</div>
+    <button type="button" id="submitButton">Retrieve Data</button>
+    <div id="loadingIndicator">Loading...</div>
 
     <script>
         (function() {
@@ -112,11 +74,10 @@
 
             // Download the data
             myConnector.getData = function(table, doneCallback) {
-                var connData = JSON.parse(tableau.connectionData);
-                var client_id = connData.client_id;
-                var client_secret = connData.client_secret;
-                var start_date = connData.start_date;
-                var end_date = connData.end_date;
+                var client_id = "dff55e62-da91-4417-bad5-8d8cbb1ccc7d";
+                var client_secret = "your_client_secret_here"; // Replace with actual secret
+                var start_date = "2023-01-01";
+                var end_date = "2023-12-31";
 
                 // First get the access token
                 $.ajax({
@@ -154,7 +115,7 @@
                                     var item = results[i];
                                     var entranceName = item.name;
                                     
-                                    // Simple facility mapping (you may need to expand this)
+                                    // Simple facility mapping
                                     var facility = entranceName.split(' ')[0] || 'Unmapped';
                                     
                                     // Parse date
@@ -193,48 +154,16 @@
             
             // Setup the click handler for the button
             $(document).ready(function() {
-                // Set default dates
-                var today = new Date();
-                var yesterday = new Date(today);
-                yesterday.setDate(yesterday.getDate() - 1);
-                
-                $('#end_date').val(formatDate(today));
-                $('#start_date').val(formatDate(yesterday));
-                
-                function formatDate(date) {
-                    var year = date.getFullYear();
-                    var month = (date.getMonth() + 1).toString().padStart(2, '0');
-                    var day = date.getDate().toString().padStart(2, '0');
-                    return year + '-' + month + '-' + day;
-                }
-                
                 $("#submitButton").click(function() {
-                    var client_id = $('#client_id').val().trim();
-                    var client_secret = $('#client_secret').val().trim();
-                    var start_date = $('#start_date').val().trim();
-                    var end_date = $('#end_date').val().trim();
-                    
-                    // Validate inputs
-                    if (!client_id || !client_secret) {
-                        $('#errorMsg').html("Please enter both Client ID and Client Secret");
-                        return;
-                    }
-                    
-                    if (!start_date || !end_date) {
-                        $('#errorMsg').html("Please enter both Start Date and End Date");
-                        return;
-                    }
-                    
                     // Show loading indicator
                     $('#loadingIndicator').show();
-                    $('#errorMsg').html("");
                     
                     // Store the credentials in connectionData
                     var connectionData = {
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                        "start_date": start_date,
-                        "end_date": end_date
+                        "client_id": "dff55e62-da91-4417-bad5-8d8cbb1ccc7d",
+                        "client_secret": "your_client_secret_here",
+                        "start_date": "2023-01-01",
+                        "end_date": "2023-12-31"
                     };
                     
                     tableau.connectionData = JSON.stringify(connectionData);
