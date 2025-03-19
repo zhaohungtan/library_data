@@ -3,270 +3,210 @@
 <head>
     <title>Library Traffic Data Connector</title>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     
-    <!-- Import the Tableau WDC library -->
-    <script src="https://connectors.tableau.com/libs/tableauwdc-2.3.latest.js" type="text/javascript"></script>
-    
-    <!-- jQuery -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js" type="text/javascript"></script>
-    
-    <!-- Simple styling -->
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-        }
-        input {
-            width: 100%;
-            padding: 8px;
-            box-sizing: border-box;
-        }
-        button {
-            padding: 10px 15px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        #errorMsg {
-            color: red;
-            margin-bottom: 10px;
-        }
-    </style>
-</head>
+    <!-- Load the WDC JS library -->
+    <script src="https://connectors.tableau.com/libs/tableauwdc-2.3.latest.js"></script>
+    <!-- jQuery (for simplicity in making AJAX calls) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 
+</head>
 <body>
     <h1>Library Traffic Data Connector</h1>
-    <div id="errorMsg"></div>
+    <div id="errorMsg" style="color:red;"></div>
     
-    <div class="form-group">
-        <label for="client_id">Client ID:</label>
-        <input type="text" id="client_id">
-    </div>
+    <label>Client ID:</label>
+    <input type="text" id="client_id"><br><br>
     
-    <div class="form-group">
-        <label for="client_secret">Client Secret:</label>
-        <input type="password" id="client_secret">
-    </div>
+    <label>Client Secret:</label>
+    <input type="password" id="client_secret"><br><br>
     
-    <div class="form-group">
-        <label for="start_date">Start Date (YYYY-MM-DD):</label>
-        <input type="text" id="start_date" value="2025-02-01">
-    </div>
+    <label>Start Date (YYYY-MM-DD):</label>
+    <input type="text" id="start_date" value="2025-02-01"><br><br>
     
-    <div class="form-group">
-        <label for="end_date">End Date (YYYY-MM-DD):</label>
-        <input type="text" id="end_date" value="2025-02-02">
-    </div>
+    <label>End Date (YYYY-MM-DD):</label>
+    <input type="text" id="end_date" value="2025-02-02"><br><br>
     
-    <button type="button" id="submitButton">Get Data</button>
-
+    <button id="submitButton">Get Data</button>
+    
     <script>
-        (function() {
-            // Create the connector object
-            var myConnector = tableau.makeConnector();
+    (function() {
+        // 1) Create the connector object
+        var myConnector = tableau.makeConnector();
+
+        // 2) Define the schema: columns that will show up in Tableau
+        myConnector.getSchema = function(schemaCallback) {
+            var cols = [
+                { id: "dateTime",  dataType: tableau.dataTypeEnum.datetime },
+                { id: "entrance",  dataType: tableau.dataTypeEnum.string },
+                { id: "facility",  dataType: tableau.dataTypeEnum.string },
+                { id: "entries",   dataType: tableau.dataTypeEnum.int },
+                { id: "exits",     dataType: tableau.dataTypeEnum.int }
+            ];
             
-            // Define the schema
-            myConnector.getSchema = function(schemaCallback) {
-                var cols = [{
-                    id: "dateTime",
-                    alias: "Date-Time",
-                    dataType: tableau.dataTypeEnum.datetime
-                }, {
-                    id: "entrance",
-                    alias: "Entrance",
-                    dataType: tableau.dataTypeEnum.string
-                }, {
-                    id: "facility",
-                    alias: "Facility",
-                    dataType: tableau.dataTypeEnum.string
-                }, {
-                    id: "entries",
-                    alias: "Entries",
-                    dataType: tableau.dataTypeEnum.int
-                }, {
-                    id: "exits",
-                    alias: "Exits",
-                    dataType: tableau.dataTypeEnum.int
-                }];
-
-                var tableSchema = {
-                    id: "libraryTraffic",
-                    alias: "Library Traffic Data",
-                    columns: cols
-                };
-
-                schemaCallback([tableSchema]);
+            var tableSchema = {
+                id: "libraryTraffic",
+                alias: "Library Traffic Data",
+                columns: cols
             };
 
-            // Define the facility mapping
-            var facilityMapping = {
-                'AHC Back': 'AHC Library',
-                'AHC Front': 'AHC Library',
-                'AHC Rear': 'AHC Library',
-                'ANTH': 'ANTH Library',
-                'Bancroft': 'BANC Library',
-                'CHEM': 'CHEM Library',
-                'VLSB1': 'BIOS Library',
-                'VLSB2': 'BIOS Library',
-                'EAL': 'EAL Library',
-                'CHEM 2.9': 'CHEM Library',
-                'Doe North': 'DOE Library',
-                'Doe South': 'DOE Library',
-                'HAAS 2nd Floor': 'HAAS Library',
-                'HAAS 3rd Floor': 'HAAS Library',
-                'MATH': 'MATH Library',
-                'Moffit Corridor': 'DOE STACKS',
-                'Stacks East': 'DOE STACKS',
-                'EAL 2.9': 'EAL Library',
-                'Earth North': 'EART Library',
-                'Earth South': 'EART Library',
-                'ENGI': 'ENGI Library',
-                'ENVI': 'ENVI Library',
-                'GRAD': 'GRDS Library',
-                'Math 2.9': 'MATH Library',
-                'Moffit Entry': 'MOFF Library',
-                'Moffitt Exit': 'MOFF Library',
-                'Moffitt 4th': 'MOFF Library',
-                'Morrison': 'MORR Library',
-                'MUSI': 'MUSI',
-                'News': 'NEWS Library',
-                'OPTO': 'OPTO Library',
-                'PHYS': 'PHYS Library',
-                'SEAL': 'SEAL Library',
-                'SOCR': 'SOCR Library'
-            };
+            schemaCallback([tableSchema]);
+        };
+
+        // 3) The getData method: fetch rows, parse them, push to Tableau
+        myConnector.getData = function(table, doneCallback) {
+            var connData = JSON.parse(tableau.connectionData);
+            var client_id = connData.client_id;
+            var client_secret = connData.client_secret;
+            var start_date = connData.start_date;
+            var end_date = connData.end_date;
             
-            // Download the data
-            myConnector.getData = function(table, doneCallback) {
-                // Get the connection data
-                var connData = JSON.parse(tableau.connectionData);
-                var client_id = connData.client_id;
-                var client_secret = connData.client_secret;
-                var start_date = connData.start_date;
-                var end_date = connData.end_date;
-                
-                // First get the access token
-                $.ajax({
-                    url: "https://auth.sensourceinc.com/oauth/token",
-                    type: "POST",
-                    contentType: "application/json",
-                    data: JSON.stringify({
-                        "grant_type": "client_credentials",
-                        "client_id": client_id,
-                        "client_secret": client_secret
-                    }),
-                    success: function(authResponse) {
-                        var access_token = authResponse.access_token;
-                        
-                        // Then get the traffic data
-                        $.ajax({
-                            url: "https://vea.sensourceinc.com/api/data/traffic",
-                            type: "GET",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Authorization": "Bearer " + access_token
-                            },
-                            data: {
-                                "relativeDate": "custom",
-                                "startDate": start_date,
-                                "endDate": end_date,
-                                "dateGroupings": "hour",
-                                "entityType": "zone"
-                            },
-                            success: function(resp) {
-                                var results = resp.results;
-                                var tableData = [];
+            // Step A: Fetch OAuth token
+            $.ajax({
+                url: "https://auth.sensourceinc.com/oauth/token",
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret
+                }),
+                success: function(authResponse) {
+                    var access_token = authResponse.access_token;
+                    
+                    // Step B: Fetch the traffic data
+                    $.ajax({
+                        url: "https://vea.sensourceinc.com/api/data/traffic",
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": "Bearer " + access_token
+                        },
+                        data: {
+                            "relativeDate": "custom",
+                            "startDate": start_date,
+                            "endDate": end_date,
+                            "dateGroupings": "hour",
+                            "entityType": "zone"
+                        },
+                        success: function(resp) {
+                            var results = resp.results || [];
+                            var tableData = [];
+                            
+                            // Facility mapping dictionary
+                            var facilityMapping = {
+                                'AHC Back': 'AHC Library',
+                                'AHC Front': 'AHC Library',
+                                'AHC Rear': 'AHC Library',
+                                'ANTH': 'ANTH Library',
+                                'Bancroft': 'BANC Library',
+                                'CHEM': 'CHEM Library',
+                                'VLSB1': 'BIOS Library',
+                                'VLSB2': 'BIOS Library',
+                                'EAL': 'EAL Library',
+                                'CHEM 2.9': 'CHEM Library',
+                                'Doe North': 'DOE Library',
+                                'Doe South': 'DOE Library',
+                                'HAAS 2nd Floor': 'HAAS Library',
+                                'HAAS 3rd Floor': 'HAAS Library',
+                                'MATH': 'MATH Library',
+                                'Moffit Corridor': 'DOE STACKS',
+                                'Stacks East': 'DOE STACKS',
+                                'EAL 2.9': 'EAL Library',
+                                'Earth North': 'EART Library',
+                                'Earth South': 'EART Library',
+                                'ENGI': 'ENGI Library',
+                                'ENVI': 'ENVI Library',
+                                'GRAD': 'GRDS Library',
+                                'Math 2.9': 'MATH Library',
+                                'Moffit Entry': 'MOFF Library',
+                                'Moffitt Exit': 'MOFF Library',
+                                'Moffitt 4th': 'MOFF Library',
+                                'Morrison': 'MORR Library',
+                                'MUSI': 'MUSI',
+                                'News': 'NEWS Library',
+                                'OPTO': 'OPTO Library',
+                                'PHYS': 'PHYS Library',
+                                'SEAL': 'SEAL Library',
+                                'SOCR': 'SOCR Library'
+                            };
+
+                            // For each record in the API response
+                            for (var i = 0; i < results.length; i++) {
+                                var r = results[i];
+                                var entranceName = r.name || "Unknown";
+                                var facility = facilityMapping[entranceName] || "Unmapped";
+
+                                // Parse the date string from the API
+                                // recordDate_hour_1 is typically an ISO-8601 string
+                                var dt = new Date(r.recordDate_hour_1);
                                 
-                                // Process each row of data
-                                for (var i = 0; i < results.length; i++) {
-                                    var item = results[i];
-                                    var entranceName = item.name;
-                                    var facility = facilityMapping[entranceName] || 'Unmapped';
-                                    
-                                    // Parse date 
-                                    var dateTimeStr = item.recordDate_hour_1;
-                                    var dateTime = new Date(dateTimeStr);
-                                    
-                                    tableData.push({
-                                        "dateTime": dateTime,
-                                        "entrance": entranceName,
-                                        "facility": facility,
-                                        "entries": parseInt(item.sumins) || 0,
-                                        "exits": parseInt(item.sumouts) || 0
-                                    });
-                                }
-                                
-                                table.appendRows(tableData);
-                                doneCallback();
-                            },
-                            error: function(xhr, status, error) {
-                                tableau.abortWithError("Error fetching traffic data: " + error);
+                                // Prepare a row
+                                tableData.push({
+                                    "dateTime": dt,
+                                    "entrance": entranceName,
+                                    "facility": facility,
+                                    "entries": parseInt(r.sumins) || 0,
+                                    "exits":   parseInt(r.sumouts) || 0
+                                });
                             }
-                        });
-                    },
-                    error: function(xhr, status, error) {
-                        tableau.abortWithError("Authentication failed: " + error);
-                    }
-                });
+
+                            // Push data to Tableau
+                            table.appendRows(tableData);
+                            doneCallback(); // done
+                        },
+                        error: function(xhr, status, err) {
+                            tableau.abortWithError("Error fetching traffic data: " + err);
+                        }
+                    });
+                },
+                error: function(xhr, status, err) {
+                    tableau.abortWithError("Error fetching OAuth token: " + err);
+                }
+            });
+        };
+
+        // 4) Register our connector
+        tableau.registerConnector(myConnector);
+
+        // 5) Click handler for the “Get Data” button
+        document.getElementById("submitButton").addEventListener("click", function() {
+            var client_id = document.getElementById("client_id").value.trim();
+            var client_secret = document.getElementById("client_secret").value.trim();
+            var start_date = document.getElementById("start_date").value.trim();
+            var end_date = document.getElementById("end_date").value.trim();
+
+            // Basic checks
+            if (!client_id || !client_secret) {
+                document.getElementById("errorMsg").innerText = "Please enter both Client ID and Client Secret.";
+                return;
+            }
+
+            // Validate date
+            function validDate(str) { return !isNaN(new Date(str).getTime()); }
+            if (!validDate(start_date) || !validDate(end_date)) {
+                document.getElementById("errorMsg").innerText = "Please provide valid dates in YYYY-MM-DD format.";
+                return;
+            }
+
+            // Convert to full ISO string for the API
+            var startISO = new Date(start_date).toISOString();
+            var endISO = new Date(end_date).toISOString();
+            
+            // Save them into tableau.connectionData
+            var connectionData = {
+                client_id: client_id,
+                client_secret: client_secret,
+                start_date: startISO,
+                end_date: endISO
             };
 
-            // Register the connector
-            tableau.registerConnector(myConnector);
+            tableau.connectionData = JSON.stringify(connectionData);
+            tableau.connectionName = "Library Traffic Data Connector";
             
-            // Setup the click handler for the button
-            $(document).ready(function() {
-                $("#submitButton").click(function() {
-                    var client_id = $('#client_id').val().trim();
-                    var client_secret = $('#client_secret').val().trim();
-                    var start_date = $('#start_date').val().trim();
-                    var end_date = $('#end_date').val().trim();
-                    
-                    // Validate inputs
-                    if (!client_id || !client_secret) {
-                        $('#errorMsg').html("Please enter both Client ID and Client Secret");
-                        return;
-                    }
-                    
-                    function isValidDate(dateStr) {
-                        var d = new Date(dateStr);
-                        return !isNaN(d.getDate());
-                    }
-                    
-                    if (!isValidDate(start_date) || !isValidDate(end_date)) {
-                        $('#errorMsg').html("Enter valid dates. Format: YYYY-MM-DD");
-                        return;
-                    }
-                    
-                    // Convert dates to ISO format with time for API
-                    var startDateObj = new Date(start_date);
-                    var endDateObj = new Date(end_date);
-                    var startISOString = startDateObj.toISOString();
-                    var endISOString = endDateObj.toISOString();
-                    
-                    // Store the credentials in connectionData
-                    var connectionData = {
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                        "start_date": startISOString,
-                        "end_date": endISOString
-                    };
-                    
-                    tableau.connectionData = JSON.stringify(connectionData);
-                    tableau.connectionName = "Library Traffic Data";
-                    tableau.submit();
-                });
-            });
-        })();
+            // Kick off the WDC flow
+            tableau.submit();
+        });
+    })();
     </script>
 </body>
 </html>
