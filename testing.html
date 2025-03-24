@@ -1,111 +1,109 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>VEA API Test</title>
-  <meta charset="utf-8">
-  <!-- jQuery for easy AJAX calls -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    label { display: block; margin-top: 10px; }
-    input { margin-bottom: 10px; }
-    pre { background: #f4f4f4; padding: 10px; border: 1px solid #ddd; }
-    .error { color: red; }
-  </style>
+    <title>Library Traffic Data Retriever</title>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        input, button { margin: 10px 0; padding: 5px; width: 100%; }
+        #results { margin-top: 20px; border: 1px solid #ddd; padding: 10px; }
+        #errorMsg { color: red; }
+    </style>
 </head>
 <body>
-  <h1>VEA API Test</h1>
-  <div id="errorMsg" class="error"></div>
-  
-  <label>Client ID:</label>
-  <input type="text" id="client_id" placeholder="Enter your client ID">
-  
-  <label>Client Secret:</label>
-  <input type="password" id="client_secret" placeholder="Enter your client secret">
-  
-  <label>Start Date (YYYY-MM-DD):</label>
-  <input type="text" id="start_date" value="2025-02-01">
-  
-  <label>End Date (YYYY-MM-DD):</label>
-  <input type="text" id="end_date" value="2025-02-02">
-  
-  <button id="testButton">Test Get Data</button>
-  
-  <h2>Output:</h2>
-  <pre id="output"></pre>
-  
-  <script>
-    $(document).ready(function(){
-      $("#testButton").click(function(){
-        // Clear any previous messages
-        $("#output").text("");
-        $("#errorMsg").text("");
-        
-        var client_id = $("#client_id").val().trim();
-        var client_secret = $("#client_secret").val().trim();
-        var start_date = $("#start_date").val().trim();
-        var end_date = $("#end_date").val().trim();
-        
-        if (!client_id || !client_secret) {
-          $("#errorMsg").text("Please enter both Client ID and Client Secret.");
-          return;
+    <h1>Library Traffic Data Retriever</h1>
+    
+    <label for="client_id">Client ID (APIKEY):</label>
+    <input type="text" id="client_id" placeholder="Enter your Client ID">
+    
+    <label for="start_date">Start Date (YYYY-MM-DD):</label>
+    <input type="text" id="start_date" value="2025-02-01">
+    
+    <label for="end_date">End Date (YYYY-MM-DD):</label>
+    <input type="text" id="end_date" value="2025-02-02">
+    
+    <button id="fetchData">Retrieve Traffic Data</button>
+    
+    <div id="errorMsg"></div>
+    <div id="results"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script>
+    document.getElementById('fetchData').addEventListener('click', function() {
+        // Clear previous results and errors
+        document.getElementById('errorMsg').innerText = '';
+        document.getElementById('results').innerHTML = '';
+
+        // Get input values
+        const clientId = document.getElementById('client_id').value.trim();
+        const startDate = document.getElementById('start_date').value.trim();
+        const endDate = document.getElementById('end_date').value.trim();
+
+        // Basic validation
+        if (!clientId) {
+            document.getElementById('errorMsg').innerText = 'Please enter a Client ID';
+            return;
         }
-        
-        function validDate(str) {
-          return !isNaN(new Date(str).getTime());
-        }
-        
-        if (!validDate(start_date) || !validDate(end_date)) {
-          $("#errorMsg").text("Please provide valid dates in YYYY-MM-DD format.");
-          return;
-        }
-        
-        var startISO = new Date(start_date).toISOString();
-        var endISO = new Date(end_date).toISOString();
-        
-        // Step 1: Obtain the access token
+
+        // Convert dates to ISO format
+        const startISO = new Date(startDate).toISOString();
+        const endISO = new Date(endDate).toISOString();
+
+        // Make AJAX call
         $.ajax({
-          url: "https://auth.sensourceinc.com/oauth/token",
-          method: "POST",
-          contentType: "application/json",
-          data: JSON.stringify({
-            "grant_type": "client_credentials",
-            "client_id": client_id,
-            "client_secret": client_secret
-          }),
-          success: function(tokenResponse) {
-            var access_token = tokenResponse.access_token;
-            
-            // Step 2: Use the token to fetch traffic data
-            $.ajax({
-              url: "https://vea.sensourceinc.com/api/data/traffic",
-              method: "GET",
-              headers: {
+            url: "https://vea.sensourceinc.com/api/data/traffic",
+            method: "GET",
+            headers: {
                 "Content-Type": "application/json",
-                "Authorization": "Bearer " + access_token
-              },
-              data: {
+                "APIKEY": clientId
+            },
+            data: {
                 "relativeDate": "custom",
                 "startDate": startISO,
                 "endDate": endISO,
                 "dateGroupings": "hour",
                 "entityType": "zone"
-              },
-              success: function(dataResponse) {
-                // Display the JSON response in a formatted way
-                $("#output").text(JSON.stringify(dataResponse, null, 2));
-              },
-              error: function(xhr, status, err) {
-                $("#errorMsg").text("Error fetching traffic data: " + err);
-              }
-            });
-          },
-          error: function(xhr, status, err) {
-            $("#errorMsg").text("Error fetching access token: " + err);
-          }
+            },
+            success: function(resp) {
+                // Create a table to display results
+                let resultsHtml = '<h2>Retrieved Data</h2>';
+                resultsHtml += '<p>Total Records: ' + (resp.results ? resp.results.length : 0) + '</p>';
+                
+                if (resp.results && resp.results.length > 0) {
+                    resultsHtml += '<table border="1" style="width:100%; border-collapse: collapse;">';
+                    resultsHtml += '<tr><th>Name</th><th>Date</th><th>Entries</th><th>Exits</th></tr>';
+                    
+                    resp.results.forEach(function(record) {
+                        resultsHtml += `<tr>
+                            <td>${record.name || 'Unknown'}</td>
+                            <td>${record.recordDate_hour_1 || 'N/A'}</td>
+                            <td>${record.sumins || 0}</td>
+                            <td>${record.sumouts || 0}</td>
+                        </tr>`;
+                    });
+                    
+                    resultsHtml += '</table>';
+                } else {
+                    resultsHtml += '<p>No data found for the selected date range.</p>';
+                }
+
+                document.getElementById('results').innerHTML = resultsHtml;
+            },
+            error: function(xhr, status, err) {
+                // Display error details
+                let errorMessage = 'Error retrieving data: ';
+                
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    errorMessage += xhr.responseJSON.message;
+                } else {
+                    errorMessage += err || 'Unknown error';
+                }
+
+                document.getElementById('errorMsg').innerText = errorMessage;
+                console.error('Full error:', xhr);
+            }
         });
-      });
     });
-  </script>
+    </script>
 </body>
 </html>
