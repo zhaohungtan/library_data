@@ -13,8 +13,11 @@
     <h1>Library Traffic Data Connector</h1>
     <div id="errorMsg" style="color:red;"></div>
     
-    <label>Client ID (APIKEY):</label>
+    <label>Client ID:</label>
     <input type="text" id="client_id"><br><br>
+    
+    <label>Client Secret:</label>
+    <input type="password" id="client_secret"><br><br>
     
     <label>Start Date (YYYY-MM-DD):</label>
     <input type="text" id="start_date" value="2025-02-01"><br><br>
@@ -52,92 +55,109 @@
         myConnector.getData = function(table, doneCallback) {
             var connData = JSON.parse(tableau.connectionData);
             var client_id = connData.client_id;
-            var start_date = connData.start_date;
-            var end_date = connData.end_date;
-            
-            // Single call to the traffic endpoint, using APIKEY in the header
+            var client_secret = connData.client_secret;
+            var start_date = connData.start_date; // Already ISO string
+            var end_date = connData.end_date;     // Already ISO string
+
+            // Step A: Obtain OAuth token from https://auth.sensourceinc.com/oauth/token
             $.ajax({
-                url: "https://vea.sensourceinc.com/api/data/traffic",
-                method: "GET",
-                headers: {
-                    "Content-Type": "application/json",
-                    "APIKEY": client_id
-                },
-                data: {
-                    "relativeDate": "custom",
-                    "startDate": start_date,
-                    "endDate": end_date,
-                    "dateGroupings": "hour",
-                    "entityType": "zone"
-                },
-                success: function(resp) {
-                    var results = resp.results || [];
-                    var tableData = [];
-                    
-                    // Facility mapping dictionary
-                    var facilityMapping = {
-                        'AHC Back': 'AHC Library',
-                        'AHC Front': 'AHC Library',
-                        'AHC Rear': 'AHC Library',
-                        'ANTH': 'ANTH Library',
-                        'Bancroft': 'BANC Library',
-                        'CHEM': 'CHEM Library',
-                        'VLSB1': 'BIOS Library',
-                        'VLSB2': 'BIOS Library',
-                        'EAL': 'EAL Library',
-                        'CHEM 2.9': 'CHEM Library',
-                        'Doe North': 'DOE Library',
-                        'Doe South': 'DOE Library',
-                        'HAAS 2nd Floor': 'HAAS Library',
-                        'HAAS 3rd Floor': 'HAAS Library',
-                        'MATH': 'MATH Library',
-                        'Moffit Corridor': 'DOE STACKS',
-                        'Stacks East': 'DOE STACKS',
-                        'EAL 2.9': 'EAL Library',
-                        'Earth North': 'EART Library',
-                        'Earth South': 'EART Library',
-                        'ENGI': 'ENGI Library',
-                        'ENVI': 'ENVI Library',
-                        'GRAD': 'GRDS Library',
-                        'Math 2.9': 'MATH Library',
-                        'Moffit Entry': 'MOFF Library',
-                        'Moffitt Exit': 'MOFF Library',
-                        'Moffitt 4th': 'MOFF Library',
-                        'Morrison': 'MORR Library',
-                        'MUSI': 'MUSI',
-                        'News': 'NEWS Library',
-                        'OPTO': 'OPTO Library',
-                        'PHYS': 'PHYS Library',
-                        'SEAL': 'SEAL Library',
-                        'SOCR': 'SOCR Library'
-                    };
+                url: "https://auth.sensourceinc.com/oauth/token",
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret
+                }),
+                success: function(authResponse) {
+                    var access_token = authResponse.access_token; // from the JSON response
 
-                    // For each record in the API response
-                    for (var i = 0; i < results.length; i++) {
-                        var r = results[i];
-                        var entranceName = r.name || "Unknown";
-                        var facility = facilityMapping[entranceName] || "Unmapped";
+                    // Step B: Use the access token to call the traffic endpoint
+                    $.ajax({
+                        url: "https://vea.sensourceinc.com/api/data/traffic",
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": "Bearer " + access_token
+                        },
+                        data: {
+                            "relativeDate": "custom",
+                            "startDate": start_date,
+                            "endDate": end_date,
+                            "dateGroupings": "hour",
+                            "entityType": "zone"
+                        },
+                        success: function(resp) {
+                            var results = resp.results || [];
+                            var tableData = [];
+                            
+                            // Facility mapping dictionary
+                            var facilityMapping = {
+                                'AHC Back': 'AHC Library',
+                                'AHC Front': 'AHC Library',
+                                'AHC Rear': 'AHC Library',
+                                'ANTH': 'ANTH Library',
+                                'Bancroft': 'BANC Library',
+                                'CHEM': 'CHEM Library',
+                                'VLSB1': 'BIOS Library',
+                                'VLSB2': 'BIOS Library',
+                                'EAL': 'EAL Library',
+                                'CHEM 2.9': 'CHEM Library',
+                                'Doe North': 'DOE Library',
+                                'Doe South': 'DOE Library',
+                                'HAAS 2nd Floor': 'HAAS Library',
+                                'HAAS 3rd Floor': 'HAAS Library',
+                                'MATH': 'MATH Library',
+                                'Moffit Corridor': 'DOE STACKS',
+                                'Stacks East': 'DOE STACKS',
+                                'EAL 2.9': 'EAL Library',
+                                'Earth North': 'EART Library',
+                                'Earth South': 'EART Library',
+                                'ENGI': 'ENGI Library',
+                                'ENVI': 'ENVI Library',
+                                'GRAD': 'GRDS Library',
+                                'Math 2.9': 'MATH Library',
+                                'Moffit Entry': 'MOFF Library',
+                                'Moffitt Exit': 'MOFF Library',
+                                'Moffitt 4th': 'MOFF Library',
+                                'Morrison': 'MORR Library',
+                                'MUSI': 'MUSI',
+                                'News': 'NEWS Library',
+                                'OPTO': 'OPTO Library',
+                                'PHYS': 'PHYS Library',
+                                'SEAL': 'SEAL Library',
+                                'SOCR': 'SOCR Library'
+                            };
 
-                        // Parse the date string from the API
-                        // recordDate_hour_1 is typically an ISO-8601 string
-                        var dt = new Date(r.recordDate_hour_1);
-                        
-                        // Prepare a row
-                        tableData.push({
-                            "dateTime": dt,
-                            "entrance": entranceName,
-                            "facility": facility,
-                            "entries": parseInt(r.sumins) || 0,
-                            "exits":   parseInt(r.sumouts) || 0
-                        });
-                    }
+                            // Build rows from each API record
+                            for (var i = 0; i < results.length; i++) {
+                                var r = results[i];
+                                var entranceName = r.name || "Unknown";
+                                var facility = facilityMapping[entranceName] || "Unmapped";
 
-                    // Push data to Tableau
-                    table.appendRows(tableData);
-                    doneCallback(); // done
+                                // recordDate_hour_1 is typically an ISO-8601 string
+                                var dt = new Date(r.recordDate_hour_1);
+
+                                tableData.push({
+                                    "dateTime": dt,
+                                    "entrance": entranceName,
+                                    "facility": facility,
+                                    "entries": parseInt(r.sumins) || 0,
+                                    "exits":   parseInt(r.sumouts) || 0
+                                });
+                            }
+
+                            // Push data to Tableau
+                            table.appendRows(tableData);
+                            doneCallback();
+                        },
+                        error: function(xhr, status, err) {
+                            tableau.abortWithError("Error fetching traffic data: " + err);
+                        }
+                    });
                 },
                 error: function(xhr, status, err) {
-                    tableau.abortWithError("Error fetching traffic data: " + err);
+                    tableau.abortWithError("Error fetching OAuth token: " + err);
                 }
             });
         };
@@ -148,12 +168,13 @@
         // 5) Click handler for the “Get Data” button
         document.getElementById("submitButton").addEventListener("click", function() {
             var client_id = document.getElementById("client_id").value.trim();
+            var client_secret = document.getElementById("client_secret").value.trim();
             var start_date = document.getElementById("start_date").value.trim();
             var end_date = document.getElementById("end_date").value.trim();
 
             // Basic checks
-            if (!client_id) {
-                document.getElementById("errorMsg").innerText = "Please enter a Client ID (APIKEY).";
+            if (!client_id || !client_secret) {
+                document.getElementById("errorMsg").innerText = "Please enter both Client ID and Client Secret.";
                 return;
             }
 
@@ -171,6 +192,7 @@
             // Save them into tableau.connectionData
             var connectionData = {
                 client_id: client_id,
+                client_secret: client_secret,
                 start_date: startISO,
                 end_date: endISO
             };
