@@ -1,112 +1,103 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Library Traffic Data Retriever</title>
-    <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            max-width: 600px; 
-            margin: 0 auto; 
-            padding: 20px; 
-        }
-        input, button { 
-            width: 100%; 
-            padding: 10px; 
-            margin: 10px 0; 
-        }
-        #results {
-            margin-top: 20px;
-            border: 1px solid #ddd;
-            padding: 10px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            background-color: #f4f4f4;
-        }
-    </style>
+  <meta charset="utf-8">
+  <title>Test API Data Fetch with CORS Bypass</title>
+  <style>
+    table, th, td {
+      border: 1px solid black;
+      border-collapse: collapse;
+      padding: 8px;
+    }
+    th {
+      background-color: #ddd;
+    }
+  </style>
 </head>
 <body>
-    <h1>Library Traffic Data Retriever</h1>
-    
-    <label for="client_id">Client ID:</label>
-    <input type="text" id="client_id" placeholder="Enter Client ID">
-    
-    <label for="client_secret">Client Secret:</label>
-    <input type="password" id="client_secret" placeholder="Enter Client Secret">
-    
-    <label for="start_date">Start Date (YYYY-MM-DD):</label>
-    <input type="text" id="start_date" value="2025-02-01" placeholder="YYYY-MM-DD">
-    
-    <label for="end_date">End Date (YYYY-MM-DD):</label>
-    <input type="text" id="end_date" value="2025-02-02" placeholder="YYYY-MM-DD">
-    
-    <button id="fetchData">Retrieve Data</button>
-    
-    <div id="results"></div>
-
-    <script>
-    document.getElementById('fetchData').addEventListener('click', async function() {
-        // Get input values
-        const clientId = document.getElementById('client_id').value.trim();
-        const clientSecret = document.getElementById('client_secret').value.trim();
-        const startDate = document.getElementById('start_date').value.trim();
-        const endDate = document.getElementById('end_date').value.trim();
-        const resultsDiv = document.getElementById('results');
-
-        // Clear previous results
-        resultsDiv.innerHTML = 'Fetching data...';
-
-        try {
-            // Step 1: Get Access Token
-            const tokenResponse = await fetch('https://auth.sensourceinc.com/oauth/token', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    grant_type: 'client_credentials',
-                    client_id: clientId,
-                    client_secret: clientSecret
-                })
-            });
-
-            if (!tokenResponse.ok) {
-                throw new Error('Authentication failed');
-            }
-
-            const tokenData = await tokenResponse.json();
-            const accessToken = tokenData.access_token;
-
-            // Step 2: Fetch Traffic Data
-            const dataResponse = await fetch('https://vea.sensourceinc.com/api/data/traffic', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`
-                },
-                params: {
-                    relativeDate: 'custom',
-                    startDate: new Date(startDate).toISOString(),
-                    endDate: new Date(endDate).toISOString(),
-                    dateGroupings: 'hour',
-                    entityType: 'zone'
-                }
-            });
-
-            if (!dataResponse.ok) {
-                throw new Error('Failed to retrieve traffic data');
-            }
-
-            const trafficData = await dataResponse.json();
-
-            // Format and display results
-            resultsDiv.innerHTML = JSON.stringify(trafficData.results, null, 2);
-
-        } catch (error) {
-            resultsDiv.innerHTML = `Error: ${error.message}`;
-            console.error('Detailed error:', error);
-        }
+  <h1>Test API Data Fetch with CORS Bypass</h1>
+  <div>
+    <label>Client ID:</label>
+    <input type="text" id="client_id">
+  </div>
+  <div>
+    <label>Client Secret:</label>
+    <input type="password" id="client_secret">
+  </div>
+  <button id="fetchDataBtn">Fetch Data</button>
+  
+  <div id="output" style="margin-top:20px;"></div>
+  
+  <!-- Include the TACO Toolkit SDK; update the path as needed -->
+  <script src="path/to/taco-toolkit.js"></script>
+  <script>
+    document.getElementById("fetchDataBtn").addEventListener("click", function() {
+      // Clear previous output
+      document.getElementById("output").innerHTML = "Loading data...";
+      
+      var clientId = document.getElementById("client_id").value.trim();
+      var clientSecret = document.getElementById("client_secret").value.trim();
+      
+      if (!clientId || !clientSecret) {
+        document.getElementById("output").innerText = "Please enter both Client ID and Client Secret.";
+        return;
+      }
+      
+      // Step 1: Obtain OAuth token using taco.get() with CORS bypass
+      taco.get("https://auth.sensourceinc.com/oauth/token", {
+         method: "POST",
+         contentType: "application/json",
+         data: JSON.stringify({
+             "grant_type": "client_credentials",
+             "client_id": clientId,
+             "client_secret": clientSecret
+         }),
+         bypassCorsPolicy: true
+      })
+      .then(function(authResponse) {
+          var accessToken = authResponse.access_token;
+          // Define fixed one-hour period parameters
+          var params = {
+              "relativeDate": "custom",
+              "startDate": "2025-02-01T08:00:00Z", // UTC for 2/1/2025 midnight PT
+              "endDate": "2025-02-01T09:00:00Z",   // one hour later
+              "dateGroupings": "hour",
+              "entityType": "zone"
+          };
+          // Step 2: Fetch traffic data using the access token
+          return taco.get("https://vea.sensourceinc.com/api/data/traffic", {
+             method: "GET",
+             headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + accessToken
+             },
+             data: params,
+             bypassCorsPolicy: true
+          });
+      })
+      .then(function(dataResponse) {
+         // Take the first five rows of data
+         var results = dataResponse.results || [];
+         var firstFive = results.slice(0, 5);
+         
+         // Build an HTML table to display the data
+         var html = "<table><thead><tr>" +
+                    "<th>Date Time</th><th>Entrance</th><th>Entries</th><th>Exits</th>" +
+                    "</tr></thead><tbody>";
+         firstFive.forEach(function(item) {
+             var dt = new Date(item.recordDate_hour_1).toLocaleString();
+             var entrance = item.name || "Unknown";
+             var entries = item.sumins || 0;
+             var exits = item.sumouts || 0;
+             html += "<tr><td>" + dt + "</td><td>" + entrance + "</td><td>" + entries + "</td><td>" + exits + "</td></tr>";
+         });
+         html += "</tbody></table>";
+         document.getElementById("output").innerHTML = html;
+      })
+      .catch(function(error) {
+         document.getElementById("output").innerText = "Error: " + error;
+      });
     });
-    </script>
+  </script>
 </body>
 </html>
