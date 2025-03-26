@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Test API Data Fetch with CORS Bypass</title>
+  <title>API Data Fetch</title>
   <style>
     table, th, td {
       border: 1px solid black;
@@ -15,7 +15,7 @@
   </style>
 </head>
 <body>
-  <h1>Test API Data Fetch with CORS Bypass</h1>
+  <h1>API Data Fetch</h1>
   <div>
     <label>Client ID:</label>
     <input type="text" id="client_id">
@@ -28,75 +28,85 @@
   
   <div id="output" style="margin-top:20px;"></div>
   
-  <!-- Include the TACO Toolkit SDK; update the path as needed -->
-  <script src="path/to/taco-toolkit.js"></script>
   <script>
-    document.getElementById("fetchDataBtn").addEventListener("click", function() {
+    document.getElementById("fetchDataBtn").addEventListener("click", async function() {
       // Clear previous output
-      document.getElementById("output").innerHTML = "Loading data...";
+      const outputDiv = document.getElementById("output");
+      outputDiv.innerHTML = "Loading data...";
       
-      var clientId = document.getElementById("client_id").value.trim();
-      var clientSecret = document.getElementById("client_secret").value.trim();
+      const clientId = document.getElementById("client_id").value.trim();
+      const clientSecret = document.getElementById("client_secret").value.trim();
       
       if (!clientId || !clientSecret) {
-        document.getElementById("output").innerText = "Please enter both Client ID and Client Secret.";
+        outputDiv.innerText = "Please enter both Client ID and Client Secret.";
         return;
       }
       
-      // Step 1: Obtain OAuth token using taco.get() with CORS bypass
-      taco.get("https://auth.sensourceinc.com/oauth/token", {
-         method: "POST",
-         contentType: "application/json",
-         data: JSON.stringify({
-             "grant_type": "client_credentials",
-             "client_id": clientId,
-             "client_secret": clientSecret
-         }),
-         bypassCorsPolicy: true
-      })
-      .then(function(authResponse) {
-          var accessToken = authResponse.access_token;
-          // Define fixed one-hour period parameters
-          var params = {
-              "relativeDate": "custom",
-              "startDate": "2025-02-01T08:00:00Z", // UTC for 2/1/2025 midnight PT
-              "endDate": "2025-02-01T09:00:00Z",   // one hour later
-              "dateGroupings": "hour",
-              "entityType": "zone"
-          };
-          // Step 2: Fetch traffic data using the access token
-          return taco.get("https://vea.sensourceinc.com/api/data/traffic", {
-             method: "GET",
-             headers: {
-                "Content-Type": "application/json",
-                "Authorization": "Bearer " + accessToken
-             },
-             data: params,
-             bypassCorsPolicy: true
-          });
-      })
-      .then(function(dataResponse) {
-         // Take the first five rows of data
-         var results = dataResponse.results || [];
-         var firstFive = results.slice(0, 5);
-         
-         // Build an HTML table to display the data
-         var html = "<table><thead><tr>" +
-                    "<th>Date Time</th><th>Entrance</th><th>Entries</th><th>Exits</th>" +
-                    "</tr></thead><tbody>";
-         firstFive.forEach(function(item) {
-             var dt = new Date(item.recordDate_hour_1).toLocaleString();
-             var entrance = item.name || "Unknown";
-             var entries = item.sumins || 0;
-             var exits = item.sumouts || 0;
-             html += "<tr><td>" + dt + "</td><td>" + entrance + "</td><td>" + entries + "</td><td>" + exits + "</td></tr>";
-         });
-         html += "</tbody></table>";
-         document.getElementById("output").innerHTML = html;
-      })
-      .catch(function(error) {
-         document.getElementById("output").innerText = "Error: " + error;
-      });
+      try {
+        // Step 1: Get OAuth Token
+        const authResponse = await fetch("https://auth.sensourceinc.com/oauth/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            "grant_type": "client_credentials",
+            "client_id": clientId,
+            "client_secret": clientSecret
+          })
+        });
+        
+        if (!authResponse.ok) {
+          throw new Error(`Authentication failed: ${authResponse.status}`);
+        }
+        
+        const authData = await authResponse.json();
+        const accessToken = authData.access_token;
+        
+        // Step 2: Fetch Traffic Data
+        const params = new URLSearchParams({
+          "relativeDate": "custom",
+          "startDate": "2025-02-01T08:00:00Z",
+          "endDate": "2025-02-01T09:00:00Z",
+          "dateGroupings": "hour",
+          "entityType": "zone"
+        });
+        
+        const dataResponse = await fetch(`https://vea.sensourceinc.com/api/data/traffic?${params}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`
+          }
+        });
+        
+        if (!dataResponse.ok) {
+          throw new Error(`Data fetch failed: ${dataResponse.status}`);
+        }
+        
+        const responseData = await dataResponse.json();
+        const results = responseData.results || [];
+        const firstFive = results.slice(0, 5);
+        
+        // Build HTML table
+        let html = "<table><thead><tr>" +
+                   "<th>Date Time</th><th>Entrance</th><th>Entries</th><th>Exits</th>" +
+                   "</tr></thead><tbody>";
+        
+        firstFive.forEach(item => {
+          const dt = new Date(item.recordDate_hour_1).toLocaleString();
+          const entrance = item.name || "Unknown";
+          const entries = item.sumins || 0;
+          const exits = item.sumouts || 0;
+          html += `<tr><td>${dt}</td><td>${entrance}</td><td>${entries}</td><td>${exits}</td></tr>`;
+        });
+        
+        html += "</tbody></table>";
+        outputDiv.innerHTML = html;
+        
+      } catch (error) {
+        outputDiv.innerText = `Error: ${error.message}`;
+      }
     });
   </script>
 </body>
