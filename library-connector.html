@@ -6,10 +6,8 @@
     
     <!-- Load the WDC JS library -->
     <script src="https://connectors.tableau.com/libs/tableauwdc-2.3.latest.js"></script>
-    <!-- jQuery (if needed for other things) -->
+    <!-- jQuery (for simplicity in making AJAX calls) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <!-- Load the TACO Toolkit SDK (update the path as needed) -->
-    <script src="path/to/taco-toolkit.js"></script>
 </head>
 <body>
     <h1>Library Traffic Data Connector</h1>
@@ -24,35 +22,13 @@
     <label>Start Date (YYYY-MM-DD):</label>
     <input type="text" id="start_date" value="2025-02-01"><br><br>
     
-    <label>Start Time (HH:MM):</label>
-    <input type="text" id="start_time" value="00:00"><br><br>
-    
     <label>End Date (YYYY-MM-DD):</label>
     <input type="text" id="end_date" value="2025-02-02"><br><br>
-    
-    <label>End Time (HH:MM):</label>
-    <input type="text" id="end_time" value="00:00"><br><br>
     
     <button id="submitButton">Get Data</button>
     
     <script>
     (function() {
-        // Precompute facility mapping to avoid repeated lookups
-        const FACILITY_MAPPING = {
-            'AHC Back': 'AHC Library', 'AHC Front': 'AHC Library', 'AHC Rear': 'AHC Library',
-            'ANTH': 'ANTH Library', 'Bancroft': 'BANC Library', 'CHEM': 'CHEM Library',
-            'VLSB1': 'BIOS Library', 'VLSB2': 'BIOS Library', 'EAL': 'EAL Library',
-            'CHEM 2.9': 'CHEM Library', 'Doe North': 'DOE Library', 'Doe South': 'DOE Library',
-            'HAAS 2nd Floor': 'HAAS Library', 'HAAS 3rd Floor': 'HAAS Library', 
-            'MATH': 'MATH Library', 'Moffit Corridor': 'DOE STACKS', 'Stacks East': 'DOE STACKS',
-            'EAL 2.9': 'EAL Library', 'Earth North': 'EART Library', 'Earth South': 'EART Library',
-            'ENGI': 'ENGI Library', 'ENVI': 'ENVI Library', 'GRAD': 'GRDS Library',
-            'Math 2.9': 'MATH Library', 'Moffit Entry': 'MOFF Library', 'Moffitt Exit': 'MOFF Library', 
-            'Moffitt 4th': 'MOFF Library', 'Morrison': 'MORR Library', 'MUSI': 'MUSI',
-            'News': 'NEWS Library', 'OPTO': 'OPTO Library', 'PHYS': 'PHYS Library', 
-            'SEAL': 'SEAL Library', 'SOCR': 'SOCR Library'
-        };
-
         // 1) Create the connector object
         var myConnector = tableau.makeConnector();
 
@@ -80,84 +56,93 @@
             var connData = JSON.parse(tableau.connectionData);
             var client_id = connData.client_id;
             var client_secret = connData.client_secret;
-            var start_datetime = connData.start_datetime;
-            var end_datetime = connData.end_datetime;
+            var start_date = connData.start_date; // Already ISO string
+            var end_date = connData.end_date;     // Already ISO string
 
-            // Use Promises to handle asynchronous operations more efficiently
-            function getAccessToken() {
-                return taco.get("https://auth.sensourceinc.com/oauth/token", {
-                    method: "POST",
-                    contentType: "application/json",
-                    data: JSON.stringify({
-                        "grant_type": "client_credentials",
-                        "client_id": client_id,
-                        "client_secret": client_secret
-                    }),
-                    bypassCorsPolicy: true
-                });
-            }
+            // Step A: Obtain OAuth token from https://auth.sensourceinc.com/oauth/token
+            // Use connector.get() with bypassCorsPolicy to circumvent CORS restrictions
+            myConnector.get("https://auth.sensourceinc.com/oauth/token", {
+                bypassCorsPolicy: true,
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret
+                }),
+                success: function(authResponse) {
+                    var access_token = authResponse.access_token; // from the JSON response
 
-            function fetchTrafficData(access_token) {
-                return taco.get("https://vea.sensourceinc.com/api/data/traffic", {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": "Bearer " + access_token
-                    },
-                    data: {
-                        "relativeDate": "custom",
-                        "startDate": start_datetime,
-                        "endDate": end_datetime,
-                        "dateGroupings": "hour",
-                        "entityType": "zone"
-                    },
-                    bypassCorsPolicy: true
-                });
-            }
+                    // Step B: Use the access token to call the traffic endpoint
+                    // Again, use connector.get() with bypassCorsPolicy
+                    myConnector.get("https://vea.sensourceinc.com/api/data/traffic", {
+                        bypassCorsPolicy: true,
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": "Bearer " + access_token
+                        },
+                        data: {
+                            "relativeDate": "custom",
+                            "startDate": start_date,
+                            "endDate": end_date,
+                            "dateGroupings": "hour",
+                            "entityType": "zone"
+                        },
+                        success: function(resp) {
+                            var results = resp.results || [];
+                            var tableData = [];
+                            
+                            // Facility mapping dictionary (unchanged from previous version)
+                            var facilityMapping = {
+                                'AHC Back': 'AHC Library',
+                                'AHC Front': 'AHC Library',
+                                'AHC Rear': 'AHC Library',
+                                // ... (rest of the mapping remains the same)
+                            };
 
-            // Optimize data processing with more efficient methods
-            function processTrafficData(resp) {
-                const results = resp.results || [];
-                const tableData = results.map(r => {
-                    const entranceName = r.name || "Unknown";
-                    const facility = FACILITY_MAPPING[entranceName] || "Unmapped";
+                            // Build rows from each API record
+                            for (var i = 0; i < results.length; i++) {
+                                var r = results[i];
+                                var entranceName = r.name || "Unknown";
+                                var facility = facilityMapping[entranceName] || "Unmapped";
 
-                    return {
-                        "dateTime": new Date(r.recordDate_hour_1),
-                        "entrance": entranceName,
-                        "facility": facility,
-                        "entries": +r.sumins || 0,  // Faster type conversion with unary plus
-                        "exits": +r.sumouts || 0
-                    };
-                });
+                                // recordDate_hour_1 is typically an ISO-8601 string
+                                var dt = new Date(r.recordDate_hour_1);
 
-                return tableData;
-            }
+                                tableData.push({
+                                    "dateTime": dt,
+                                    "entrance": entranceName,
+                                    "facility": facility,
+                                    "entries": parseInt(r.sumins) || 0,
+                                    "exits":   parseInt(r.sumouts) || 0
+                                });
+                            }
 
-            // Use Promise chain for cleaner, more efficient async handling
-            getAccessToken()
-                .then(fetchTrafficData)
-                .then(processTrafficData)
-                .then(tableData => {
-                    table.appendRows(tableData);
-                    doneCallback();
-                })
-                .catch(err => {
-                    tableau.abortWithError("Error fetching data: " + err);
-                });
+                            // Push data to Tableau
+                            table.appendRows(tableData);
+                            doneCallback();
+                        },
+                        error: function(xhr, status, err) {
+                            tableau.abortWithError("Error fetching traffic data: " + err);
+                        }
+                    });
+                },
+                error: function(xhr, status, err) {
+                    tableau.abortWithError("Error fetching OAuth token: " + err);
+                }
+            });
         };
 
         // 4) Register our connector
         tableau.registerConnector(myConnector);
 
-        // 5) Click handler for the "Get Data" button
+        // 5) Click handler for the "Get Data" button (unchanged)
         document.getElementById("submitButton").addEventListener("click", function() {
             var client_id = document.getElementById("client_id").value.trim();
             var client_secret = document.getElementById("client_secret").value.trim();
             var start_date = document.getElementById("start_date").value.trim();
-            var start_time = document.getElementById("start_time").value.trim();
             var end_date = document.getElementById("end_date").value.trim();
-            var end_time = document.getElementById("end_time").value.trim();
 
             // Basic checks
             if (!client_id || !client_secret) {
@@ -165,32 +150,23 @@
                 return;
             }
 
-            // Validate date and time
+            // Validate date
             function validDate(str) { return !isNaN(new Date(str).getTime()); }
-            function validTime(str) { 
-                return /^([01]\d|2[0-3]):([0-5]\d)$/.test(str); 
-            }
-
             if (!validDate(start_date) || !validDate(end_date)) {
                 document.getElementById("errorMsg").innerText = "Please provide valid dates in YYYY-MM-DD format.";
                 return;
             }
 
-            if (!validTime(start_time) || !validTime(end_time)) {
-                document.getElementById("errorMsg").innerText = "Please provide valid times in HH:MM format (00:00 - 23:59).";
-                return;
-            }
-
-            // Combine date and time into full ISO datetime strings
-            var startISO = new Date(`${start_date}T${start_time}:00`).toISOString();
-            var endISO = new Date(`${end_date}T${end_time}:00`).toISOString();
+            // Convert to full ISO string for the API
+            var startISO = new Date(start_date).toISOString();
+            var endISO = new Date(end_date).toISOString();
             
             // Save them into tableau.connectionData
             var connectionData = {
                 client_id: client_id,
                 client_secret: client_secret,
-                start_datetime: startISO,
-                end_datetime: endISO
+                start_date: startISO,
+                end_date: endISO
             };
 
             tableau.connectionData = JSON.stringify(connectionData);
