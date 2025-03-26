@@ -1,142 +1,112 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>VeaAPIClient Test</title>
+    <meta charset="UTF-8">
+    <title>Library Traffic Data Retriever</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+        }
+        input, button { 
+            width: 100%; 
+            padding: 10px; 
+            margin: 10px 0; 
+        }
+        #results {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #f4f4f4;
+        }
+    </style>
 </head>
 <body>
-  <h1>Traffic Data Test</h1>
-  <div id="output">Loading data...</div>
+    <h1>Library Traffic Data Retriever</h1>
+    
+    <label for="client_id">Client ID:</label>
+    <input type="text" id="client_id" placeholder="Enter Client ID">
+    
+    <label for="client_secret">Client Secret:</label>
+    <input type="password" id="client_secret" placeholder="Enter Client Secret">
+    
+    <label for="start_date">Start Date (YYYY-MM-DD):</label>
+    <input type="text" id="start_date" value="2025-02-01" placeholder="YYYY-MM-DD">
+    
+    <label for="end_date">End Date (YYYY-MM-DD):</label>
+    <input type="text" id="end_date" value="2025-02-02" placeholder="YYYY-MM-DD">
+    
+    <button id="fetchData">Retrieve Data</button>
+    
+    <div id="results"></div>
 
-  <script>
-    // A simple JavaScript implementation of your VeaAPIClient
-    class VeaAPIClient {
-      constructor() {
-        // Replace these with valid credentials if needed
-        this.client_id = "your_client_id";
-        this.client_secret = "your_client_secret";
-      }
+    <script>
+    document.getElementById('fetchData').addEventListener('click', async function() {
+        // Get input values
+        const clientId = document.getElementById('client_id').value.trim();
+        const clientSecret = document.getElementById('client_secret').value.trim();
+        const startDate = document.getElementById('start_date').value.trim();
+        const endDate = document.getElementById('end_date').value.trim();
+        const resultsDiv = document.getElementById('results');
 
-      // Method to get traffic data
-      getTrafficData(start_date, end_date) {
-        // First obtain the OAuth token then call the traffic endpoint.
-        return fetch("https://auth.sensourceinc.com/oauth/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            "grant_type": "client_credentials",
-            "client_id": this.client_id,
-            "client_secret": this.client_secret
-          })
-        })
-        .then(response => response.json())
-        .then(authResponse => {
-          const access_token = authResponse.access_token;
-          // Prepare query parameters
-          const params = new URLSearchParams({
-            "relativeDate": "custom",
-            "startDate": start_date,
-            "endDate": end_date,
-            "dateGroupings": "hour",
-            "entityType": "zone"
-          });
-          return fetch("https://vea.sensourceinc.com/api/data/traffic?" + params.toString(), {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": "Bearer " + access_token
+        // Clear previous results
+        resultsDiv.innerHTML = 'Fetching data...';
+
+        try {
+            // Step 1: Get Access Token
+            const tokenResponse = await fetch('https://auth.sensourceinc.com/oauth/token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    grant_type: 'client_credentials',
+                    client_id: clientId,
+                    client_secret: clientSecret
+                })
+            });
+
+            if (!tokenResponse.ok) {
+                throw new Error('Authentication failed');
             }
-          });
-        })
-        .then(response => response.json());
-      }
 
-      // Convert the traffic data to an HTML table
-      convertToDataframe(trafficData) {
-        const results = trafficData.results || [];
-        let html = "<table border='1' cellspacing='0' cellpadding='5'><thead><tr>" +
-                   "<th>Date Time</th><th>Entrance</th><th>Facility</th><th>Entries</th><th>Exits</th>" +
-                   "</tr></thead><tbody>";
+            const tokenData = await tokenResponse.json();
+            const accessToken = tokenData.access_token;
 
-        // Facility mapping dictionary (adjust if needed)
-        const facilityMapping = {
-          'AHC Back': 'AHC Library',
-          'AHC Front': 'AHC Library',
-          'AHC Rear': 'AHC Library',
-          'ANTH': 'ANTH Library',
-          'Bancroft': 'BANC Library',
-          'CHEM': 'CHEM Library',
-          'VLSB1': 'BIOS Library',
-          'VLSB2': 'BIOS Library',
-          'EAL': 'EAL Library',
-          'CHEM 2.9': 'CHEM Library',
-          'Doe North': 'DOE Library',
-          'Doe South': 'DOE Library',
-          'HAAS 2nd Floor': 'HAAS Library',
-          'HAAS 3rd Floor': 'HAAS Library',
-          'MATH': 'MATH Library',
-          'Moffit Corridor': 'DOE STACKS',
-          'Stacks East': 'DOE STACKS',
-          'EAL 2.9': 'EAL Library',
-          'Earth North': 'EART Library',
-          'Earth South': 'EART Library',
-          'ENGI': 'ENGI Library',
-          'ENVI': 'ENVI Library',
-          'GRAD': 'GRDS Library',
-          'Math 2.9': 'MATH Library',
-          'Moffit Entry': 'MOFF Library',
-          'Moffitt Exit': 'MOFF Library',
-          'Moffitt 4th': 'MOFF Library',
-          'Morrison': 'MORR Library',
-          'MUSI': 'MUSI',
-          'News': 'NEWS Library',
-          'OPTO': 'OPTO Library',
-          'PHYS': 'PHYS Library',
-          'SEAL': 'SEAL Library',
-          'SOCR': 'SOCR Library'
-        };
+            // Step 2: Fetch Traffic Data
+            const dataResponse = await fetch('https://vea.sensourceinc.com/api/data/traffic', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`
+                },
+                params: {
+                    relativeDate: 'custom',
+                    startDate: new Date(startDate).toISOString(),
+                    endDate: new Date(endDate).toISOString(),
+                    dateGroupings: 'hour',
+                    entityType: 'zone'
+                }
+            });
 
-        results.forEach(r => {
-          const entranceName = r.name || "Unknown";
-          const facility = facilityMapping[entranceName] || "Unmapped";
-          const dt = new Date(r.recordDate_hour_1).toLocaleString();
-          const entries = parseInt(r.sumins) || 0;
-          const exits = parseInt(r.sumouts) || 0;
-          html += `<tr>
-                     <td>${dt}</td>
-                     <td>${entranceName}</td>
-                     <td>${facility}</td>
-                     <td>${entries}</td>
-                     <td>${exits}</td>
-                   </tr>`;
-        });
-        html += "</tbody></table>";
-        return html;
-      }
-    }
+            if (!dataResponse.ok) {
+                throw new Error('Failed to retrieve traffic data');
+            }
 
-    // Main function mimicking your Python def main()
-    function main() {
-      const client = new VeaAPIClient();
+            const trafficData = await dataResponse.json();
 
-      // For midnight PT on 2/1/2025 (local time)
-      // Use UTC timestamps to avoid ambiguity:
-      const start_date = "2025-02-01T08:00:00Z";  // 2/1/2025 12:00 AM in Pacific time
-      const end_date = "2025-02-01T09:00:00Z";      // 2/1/2025 1:00 AM in Pacific time
+            // Format and display results
+            resultsDiv.innerHTML = JSON.stringify(trafficData.results, null, 2);
 
-      client.getTrafficData(start_date, end_date)
-        .then(traffic_data => {
-          // Convert the traffic data to an HTML table
-          const htmlTable = client.convertToDataframe(traffic_data);
-          document.getElementById("output").innerHTML = htmlTable;
-        })
-        .catch(err => {
-          document.getElementById("output").innerText = "Error fetching data: " + err;
-        });
-    }
-
-    // Run main() on page load
-    window.onload = main;
-  </script>
+        } catch (error) {
+            resultsDiv.innerHTML = `Error: ${error.message}`;
+            console.error('Detailed error:', error);
+        }
+    });
+    </script>
 </body>
 </html>
