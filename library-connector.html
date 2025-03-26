@@ -6,8 +6,10 @@
     
     <!-- Load the WDC JS library -->
     <script src="https://connectors.tableau.com/libs/tableauwdc-2.3.latest.js"></script>
-    <!-- jQuery (for simplicity in making AJAX calls) -->
+    <!-- jQuery (if needed for other things) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <!-- Load the TACO Toolkit SDK (update the path as needed) -->
+    <script src="path/to/taco-toolkit.js"></script>
 </head>
 <body>
     <h1>Library Traffic Data Connector</h1>
@@ -59,10 +61,8 @@
             var start_date = connData.start_date; // Already ISO string
             var end_date = connData.end_date;     // Already ISO string
 
-            // Step A: Obtain OAuth token from https://auth.sensourceinc.com/oauth/token
-            // Use connector.get() with bypassCorsPolicy to circumvent CORS restrictions
-            myConnector.get("https://auth.sensourceinc.com/oauth/token", {
-                bypassCorsPolicy: true,
+            // Step A: Obtain OAuth token using the TACO Toolkit to bypass CORS
+            taco.get("https://auth.sensourceinc.com/oauth/token", {
                 method: "POST",
                 contentType: "application/json",
                 data: JSON.stringify({
@@ -70,74 +70,100 @@
                     "client_id": client_id,
                     "client_secret": client_secret
                 }),
-                success: function(authResponse) {
-                    var access_token = authResponse.access_token; // from the JSON response
+                bypassCorsPolicy: true
+            })
+            .then(function(authResponse) {
+                var access_token = authResponse.access_token;
+                // Step B: Use the access token to call the traffic endpoint with CORS bypass
+                return taco.get("https://vea.sensourceinc.com/api/data/traffic", {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + access_token
+                    },
+                    data: {
+                        "relativeDate": "custom",
+                        "startDate": start_date,
+                        "endDate": end_date,
+                        "dateGroupings": "hour",
+                        "entityType": "zone"
+                    },
+                    bypassCorsPolicy: true
+                });
+            })
+            .then(function(resp) {
+                var results = resp.results || [];
+                var tableData = [];
+                
+                // Facility mapping dictionary
+                var facilityMapping = {
+                    'AHC Back': 'AHC Library',
+                    'AHC Front': 'AHC Library',
+                    'AHC Rear': 'AHC Library',
+                    'ANTH': 'ANTH Library',
+                    'Bancroft': 'BANC Library',
+                    'CHEM': 'CHEM Library',
+                    'VLSB1': 'BIOS Library',
+                    'VLSB2': 'BIOS Library',
+                    'EAL': 'EAL Library',
+                    'CHEM 2.9': 'CHEM Library',
+                    'Doe North': 'DOE Library',
+                    'Doe South': 'DOE Library',
+                    'HAAS 2nd Floor': 'HAAS Library',
+                    'HAAS 3rd Floor': 'HAAS Library',
+                    'MATH': 'MATH Library',
+                    'Moffit Corridor': 'DOE STACKS',
+                    'Stacks East': 'DOE STACKS',
+                    'EAL 2.9': 'EAL Library',
+                    'Earth North': 'EART Library',
+                    'Earth South': 'EART Library',
+                    'ENGI': 'ENGI Library',
+                    'ENVI': 'ENVI Library',
+                    'GRAD': 'GRDS Library',
+                    'Math 2.9': 'MATH Library',
+                    'Moffit Entry': 'MOFF Library',
+                    'Moffitt Exit': 'MOFF Library',
+                    'Moffitt 4th': 'MOFF Library',
+                    'Morrison': 'MORR Library',
+                    'MUSI': 'MUSI',
+                    'News': 'NEWS Library',
+                    'OPTO': 'OPTO Library',
+                    'PHYS': 'PHYS Library',
+                    'SEAL': 'SEAL Library',
+                    'SOCR': 'SOCR Library'
+                };
 
-                    // Step B: Use the access token to call the traffic endpoint
-                    // Again, use connector.get() with bypassCorsPolicy
-                    myConnector.get("https://vea.sensourceinc.com/api/data/traffic", {
-                        bypassCorsPolicy: true,
-                        method: "GET",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": "Bearer " + access_token
-                        },
-                        data: {
-                            "relativeDate": "custom",
-                            "startDate": start_date,
-                            "endDate": end_date,
-                            "dateGroupings": "hour",
-                            "entityType": "zone"
-                        },
-                        success: function(resp) {
-                            var results = resp.results || [];
-                            var tableData = [];
-                            
-                            // Facility mapping dictionary (unchanged from previous version)
-                            var facilityMapping = {
-                                'AHC Back': 'AHC Library',
-                                'AHC Front': 'AHC Library',
-                                'AHC Rear': 'AHC Library',
-                                // ... (rest of the mapping remains the same)
-                            };
+                // Build rows from each API record
+                for (var i = 0; i < results.length; i++) {
+                    var r = results[i];
+                    var entranceName = r.name || "Unknown";
+                    var facility = facilityMapping[entranceName] || "Unmapped";
 
-                            // Build rows from each API record
-                            for (var i = 0; i < results.length; i++) {
-                                var r = results[i];
-                                var entranceName = r.name || "Unknown";
-                                var facility = facilityMapping[entranceName] || "Unmapped";
+                    // Convert the ISO string to a Date object
+                    var dt = new Date(r.recordDate_hour_1);
 
-                                // recordDate_hour_1 is typically an ISO-8601 string
-                                var dt = new Date(r.recordDate_hour_1);
-
-                                tableData.push({
-                                    "dateTime": dt,
-                                    "entrance": entranceName,
-                                    "facility": facility,
-                                    "entries": parseInt(r.sumins) || 0,
-                                    "exits":   parseInt(r.sumouts) || 0
-                                });
-                            }
-
-                            // Push data to Tableau
-                            table.appendRows(tableData);
-                            doneCallback();
-                        },
-                        error: function(xhr, status, err) {
-                            tableau.abortWithError("Error fetching traffic data: " + err);
-                        }
+                    tableData.push({
+                        "dateTime": dt,
+                        "entrance": entranceName,
+                        "facility": facility,
+                        "entries": parseInt(r.sumins) || 0,
+                        "exits":   parseInt(r.sumouts) || 0
                     });
-                },
-                error: function(xhr, status, err) {
-                    tableau.abortWithError("Error fetching OAuth token: " + err);
                 }
+
+                // Push data to Tableau
+                table.appendRows(tableData);
+                doneCallback();
+            })
+            .catch(function(err) {
+                tableau.abortWithError("Error fetching data: " + err);
             });
         };
 
         // 4) Register our connector
         tableau.registerConnector(myConnector);
 
-        // 5) Click handler for the "Get Data" button (unchanged)
+        // 5) Click handler for the “Get Data” button
         document.getElementById("submitButton").addEventListener("click", function() {
             var client_id = document.getElementById("client_id").value.trim();
             var client_secret = document.getElementById("client_secret").value.trim();
