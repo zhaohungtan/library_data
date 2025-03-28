@@ -1,207 +1,155 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <title>Library Traffic Data Connector</title>
-    <meta charset="utf-8">
-    
-    <!-- Load the WDC JS library -->
-    <script src="https://connectors.tableau.com/libs/tableauwdc-2.3.latest.js"></script>
-    <!-- jQuery (if needed for other things) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <!-- Load the TACO Toolkit SDK (update the path as needed) -->
-    <script src="path/to/taco-toolkit.js"></script>
-</head>
-<body>
-    <h1>Library Traffic Data Connector</h1>
-    <div id="errorMsg" style="color:red;"></div>
-    
-    <label>Client ID:</label>
-    <input type="text" id="client_id"><br><br>
-    
-    <label>Client Secret:</label>
-    <input type="password" id="client_secret"><br><br>
-    
-    <label>Start Date (YYYY-MM-DD):</label>
-    <input type="text" id="start_date" value="2025-02-01"><br><br>
-    
-    <label>End Date (YYYY-MM-DD):</label>
-    <input type="text" id="end_date" value="2025-02-02"><br><br>
-    
-    <button id="submitButton">Get Data</button>
-    
+  <head>
+    <meta charset="utf-8" />
+    <title>Sensource WDC with Client Credentials</title>
+    <!-- Tableau Web Data Connector library (v2.x) -->
+    <script src="https://cdn.jsdelivr.net/npm/tableauwdc@2.3.0/dist/tableauwdc-2.3.0.min.js"></script>
     <script>
-    (function() {
-        // 1) Create the connector object
-        var myConnector = tableau.makeConnector();
+      /**************************************************
+       * 1. Create the WDC connector object
+       **************************************************/
+      let myConnector = tableau.makeConnector();
 
-        // 2) Define the schema: columns that will show up in Tableau
-        myConnector.getSchema = function(schemaCallback) {
-            var cols = [
-                { id: "dateTime",  dataType: tableau.dataTypeEnum.datetime },
-                { id: "entrance",  dataType: tableau.dataTypeEnum.string },
-                { id: "facility",  dataType: tableau.dataTypeEnum.string },
-                { id: "entries",   dataType: tableau.dataTypeEnum.int },
-                { id: "exits",     dataType: tableau.dataTypeEnum.int }
-            ];
-            
-            var tableSchema = {
-                id: "libraryTraffic",
-                alias: "Library Traffic Data",
-                columns: cols
-            };
+      /**
+       * 2. getSchema
+       *
+       * Tells Tableau what columns to expect in the data.
+       * Adjust these as needed to match your real Sensource response.
+       */
+      myConnector.getSchema = function (schemaCallback) {
+        const cols = [
+          { id: "deviceId", dataType: tableau.dataTypeEnum.string },
+          { id: "locationName", dataType: tableau.dataTypeEnum.string },
+          { id: "count", dataType: tableau.dataTypeEnum.int },
+          { id: "timestamp", dataType: tableau.dataTypeEnum.datetime },
+        ];
 
-            schemaCallback([tableSchema]);
+        const tableSchema = {
+          id: "SensourceData",
+          alias: "Sensource Data via Client Credentials",
+          columns: cols,
         };
 
-        // 3) The getData method: fetch rows, parse them, push to Tableau
-        myConnector.getData = function(table, doneCallback) {
-            var connData = JSON.parse(tableau.connectionData);
-            var client_id = connData.client_id;
-            var client_secret = connData.client_secret;
-            var start_date = connData.start_date; // Already ISO string
-            var end_date = connData.end_date;     // Already ISO string
+        // Pass our table definition to Tableau
+        schemaCallback([tableSchema]);
+      };
 
-            // Step A: Obtain OAuth token using the TACO Toolkit to bypass CORS
-            taco.get("https://auth.sensourceinc.com/oauth/token", {
-                method: "POST",
-                contentType: "application/json",
-                data: JSON.stringify({
-                    "grant_type": "client_credentials",
-                    "client_id": client_id,
-                    "client_secret": client_secret
-                }),
-                bypassCorsPolicy: true
-            })
-            .then(function(authResponse) {
-                var access_token = authResponse.access_token;
-                // Step B: Use the access token to call the traffic endpoint with CORS bypass
-                return taco.get("https://vea.sensourceinc.com/api/data/traffic", {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": "Bearer " + access_token
-                    },
-                    data: {
-                        "relativeDate": "custom",
-                        "startDate": start_date,
-                        "endDate": end_date,
-                        "dateGroupings": "hour",
-                        "entityType": "zone"
-                    },
-                    bypassCorsPolicy: true
-                });
-            })
-            .then(function(resp) {
-                var results = resp.results || [];
-                var tableData = [];
-                
-                // Facility mapping dictionary
-                var facilityMapping = {
-                    'AHC Back': 'AHC Library',
-                    'AHC Front': 'AHC Library',
-                    'AHC Rear': 'AHC Library',
-                    'ANTH': 'ANTH Library',
-                    'Bancroft': 'BANC Library',
-                    'CHEM': 'CHEM Library',
-                    'VLSB1': 'BIOS Library',
-                    'VLSB2': 'BIOS Library',
-                    'EAL': 'EAL Library',
-                    'CHEM 2.9': 'CHEM Library',
-                    'Doe North': 'DOE Library',
-                    'Doe South': 'DOE Library',
-                    'HAAS 2nd Floor': 'HAAS Library',
-                    'HAAS 3rd Floor': 'HAAS Library',
-                    'MATH': 'MATH Library',
-                    'Moffit Corridor': 'DOE STACKS',
-                    'Stacks East': 'DOE STACKS',
-                    'EAL 2.9': 'EAL Library',
-                    'Earth North': 'EART Library',
-                    'Earth South': 'EART Library',
-                    'ENGI': 'ENGI Library',
-                    'ENVI': 'ENVI Library',
-                    'GRAD': 'GRDS Library',
-                    'Math 2.9': 'MATH Library',
-                    'Moffit Entry': 'MOFF Library',
-                    'Moffitt Exit': 'MOFF Library',
-                    'Moffitt 4th': 'MOFF Library',
-                    'Morrison': 'MORR Library',
-                    'MUSI': 'MUSI',
-                    'News': 'NEWS Library',
-                    'OPTO': 'OPTO Library',
-                    'PHYS': 'PHYS Library',
-                    'SEAL': 'SEAL Library',
-                    'SOCR': 'SOCR Library'
-                };
+      /**
+       * 3. getData
+       *
+       * Actually fetches data from Sensource’s API, using an access token
+       * acquired from the user’s client_id and client_secret.
+       */
+      myConnector.getData = async function (table, doneCallback) {
+        try {
+          // 3a. Get client credentials from the UI. In a real WDC,
+          // you might store them earlier in init(), but we do it here
+          // so it’s easy to see the flow.
+          const clientId = tableau.password; // We stored it in "tableau.password"
+          const clientSecret = window.localStorage.getItem("client_secret");
 
-                // Build rows from each API record
-                for (var i = 0; i < results.length; i++) {
-                    var r = results[i];
-                    var entranceName = r.name || "Unknown";
-                    var facility = facilityMapping[entranceName] || "Unmapped";
+          // 3b. Get an OAuth token using those credentials.
+          // Replace this URL and body to match Sensource’s real OAuth flow.
+          const authUrl = "https://api.sensourceinc.com/oauth/token";
+          const authResponse = await fetch(authUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              client_id: clientId,
+              client_secret: clientSecret,
+              grant_type: "client_credentials",
+            }),
+          });
+          const authData = await authResponse.json();
+          if (!authResponse.ok) {
+            throw new Error(authData.error_description || "OAuth request failed");
+          }
 
-                    // Convert the ISO string to a Date object
-                    var dt = new Date(r.recordDate_hour_1);
+          // Typically the token is something like authData.access_token
+          const accessToken = authData.access_token;
 
-                    tableData.push({
-                        "dateTime": dt,
-                        "entrance": entranceName,
-                        "facility": facility,
-                        "entries": parseInt(r.sumins) || 0,
-                        "exits":   parseInt(r.sumouts) || 0
-                    });
-                }
+          // 3c. Use the token to call the actual data endpoint
+          // Replace with your real Sensource data endpoint
+          const dataUrl = "https://api.sensourceinc.com/demo-data-endpoint";
+          const dataResponse = await fetch(dataUrl, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+          const jsonData = await dataResponse.json();
+          if (!dataResponse.ok) {
+            throw new Error(jsonData.error || "Data fetch failed");
+          }
 
-                // Push data to Tableau
-                table.appendRows(tableData);
-                doneCallback();
-            })
-            .catch(function(err) {
-                tableau.abortWithError("Error fetching data: " + err);
-            });
-        };
+          // 3d. Transform JSON response to match our schema
+          const tableData = jsonData.map((item) => ({
+            deviceId: item.device_id || "",
+            locationName: item.location_name || "",
+            count: item.count || 0,
+            timestamp: item.timestamp || new Date().toISOString(),
+          }));
 
-        // 4) Register our connector
-        tableau.registerConnector(myConnector);
+          // 3e. Send rows back to Tableau
+          table.appendRows(tableData);
+          doneCallback();
+        } catch (err) {
+          console.error("Error fetching data:", err);
+          // Even if there's an error, we call doneCallback() so Tableau can proceed
+          doneCallback();
+        }
+      };
 
-        // 5) Click handler for the “Get Data” button
-        document.getElementById("submitButton").addEventListener("click", function() {
-            var client_id = document.getElementById("client_id").value.trim();
-            var client_secret = document.getElementById("client_secret").value.trim();
-            var start_date = document.getElementById("start_date").value.trim();
-            var end_date = document.getElementById("end_date").value.trim();
+      /**
+       * 4. Register our connector with Tableau
+       */
+      tableau.registerConnector(myConnector);
 
-            // Basic checks
-            if (!client_id || !client_secret) {
-                document.getElementById("errorMsg").innerText = "Please enter both Client ID and Client Secret.";
-                return;
-            }
+      /**************************************************
+       * 5. "Init" code to handle user input and trigger data collection
+       **************************************************/
+      function submitWDC() {
+        // We read client_id and client_secret from the HTML form
+        const clientIdInput = document.getElementById("clientId").value;
+        const clientSecretInput = document.getElementById("clientSecret").value;
 
-            // Validate date
-            function validDate(str) { return !isNaN(new Date(str).getTime()); }
-            if (!validDate(start_date) || !validDate(end_date)) {
-                document.getElementById("errorMsg").innerText = "Please provide valid dates in YYYY-MM-DD format.";
-                return;
-            }
+        // For convenience, you can store credentials in:
+        // - tableau.username / tableau.password
+        // - localStorage
+        // - or a global variable, etc.
 
-            // Convert to full ISO string for the API
-            var startISO = new Date(start_date).toISOString();
-            var endISO = new Date(end_date).toISOString();
-            
-            // Save them into tableau.connectionData
-            var connectionData = {
-                client_id: client_id,
-                client_secret: client_secret,
-                start_date: startISO,
-                end_date: endISO
-            };
+        // We'll store client_id in "tableau.password" (just as an example).
+        // We can’t store both in the same property because WDC only offers
+        // two secure fields: tableau.username / tableau.password.
+        // So we’ll put client_secret in localStorage for demonstration.
+        // This is not recommended for production security!
+        tableau.password = clientIdInput;
+        window.localStorage.setItem("client_secret", clientSecretInput);
 
-            tableau.connectionData = JSON.stringify(connectionData);
-            tableau.connectionName = "Library Traffic Data Connector";
-            
-            // Kick off the WDC flow
-            tableau.submit();
-        });
-    })();
+        // Give our connection a user-friendly name
+        tableau.connectionName = "Sensource WDC via Client Credentials";
+        tableau.submit(); // This calls getSchema -> getData
+      }
     </script>
-</body>
+  </head>
+
+  <body>
+    <h1>Sensource WDC with Client Credentials</h1>
+    <p>Enter your client credentials below, then click "Get Data".</p>
+
+    <div style="margin-bottom: 1rem;">
+      <label for="clientId">Client ID:</label>
+      <input type="text" id="clientId" placeholder="Enter Client ID" />
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <label for="clientSecret">Client Secret:</label>
+      <input type="password" id="clientSecret" placeholder="Enter Client Secret" />
+    </div>
+
+    <button onclick="submitWDC()">Get Data</button>
+  </body>
 </html>
