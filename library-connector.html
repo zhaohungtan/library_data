@@ -1,155 +1,42 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Sensource WDC with Client Credentials</title>
-    <!-- Tableau Web Data Connector library (v2.x) -->
-    <script src="https://cdn.jsdelivr.net/npm/tableauwdc@2.3.0/dist/tableauwdc-2.3.0.min.js"></script>
-    <script>
-      /**************************************************
-       * 1. Create the WDC connector object
-       **************************************************/
-      let myConnector = tableau.makeConnector();
+<head>
+    <meta charset="UTF-8">
+    <title>Vea Traffic Data</title>
+</head>
+<body>
+    <h1>Download Traffic Data</h1>
+    <form action="/get_data" method="post">
+        <!-- Start Date -->
+        <fieldset>
+            <legend>Start Date</legend>
+            <label for="start-day">Day:</label>
+            <input type="number" id="start-day" name="start-day" min="1" max="31" required><br><br>
 
-      /**
-       * 2. getSchema
-       *
-       * Tells Tableau what columns to expect in the data.
-       * Adjust these as needed to match your real Sensource response.
-       */
-      myConnector.getSchema = function (schemaCallback) {
-        const cols = [
-          { id: "deviceId", dataType: tableau.dataTypeEnum.string },
-          { id: "locationName", dataType: tableau.dataTypeEnum.string },
-          { id: "count", dataType: tableau.dataTypeEnum.int },
-          { id: "timestamp", dataType: tableau.dataTypeEnum.datetime },
-        ];
+            <label for="start-month">Month:</label>
+            <input type="number" id="start-month" name="start-month" min="1" max="12" required><br><br>
 
-        const tableSchema = {
-          id: "SensourceData",
-          alias: "Sensource Data via Client Credentials",
-          columns: cols,
-        };
+            <label for="start-year">Year:</label>
+            <input type="number" id="start-year" name="start-year" min="2000" max="2100" required><br>
+        </fieldset>
 
-        // Pass our table definition to Tableau
-        schemaCallback([tableSchema]);
-      };
+        <br>
 
-      /**
-       * 3. getData
-       *
-       * Actually fetches data from Sensource’s API, using an access token
-       * acquired from the user’s client_id and client_secret.
-       */
-      myConnector.getData = async function (table, doneCallback) {
-        try {
-          // 3a. Get client credentials from the UI. In a real WDC,
-          // you might store them earlier in init(), but we do it here
-          // so it’s easy to see the flow.
-          const clientId = tableau.password; // We stored it in "tableau.password"
-          const clientSecret = window.localStorage.getItem("client_secret");
+        <!-- End Date -->
+        <fieldset>
+            <legend>End Date</legend>
+            <label for="end-day">Day:</label>
+            <input type="number" id="end-day" name="end-day" min="1" max="31" required><br><br>
 
-          // 3b. Get an OAuth token using those credentials.
-          // Replace this URL and body to match Sensource’s real OAuth flow.
-          const authUrl = "https://api.sensourceinc.com/oauth/token";
-          const authResponse = await fetch(authUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              client_id: clientId,
-              client_secret: clientSecret,
-              grant_type: "client_credentials",
-            }),
-          });
-          const authData = await authResponse.json();
-          if (!authResponse.ok) {
-            throw new Error(authData.error_description || "OAuth request failed");
-          }
+            <label for="end-month">Month:</label>
+            <input type="number" id="end-month" name="end-month" min="1" max="12" required><br><br>
 
-          // Typically the token is something like authData.access_token
-          const accessToken = authData.access_token;
+            <label for="end-year">Year:</label>
+            <input type="number" id="end-year" name="end-year" min="2000" max="2100" required><br>
+        </fieldset>
 
-          // 3c. Use the token to call the actual data endpoint
-          // Replace with your real Sensource data endpoint
-          const dataUrl = "https://api.sensourceinc.com/demo-data-endpoint";
-          const dataResponse = await fetch(dataUrl, {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-          });
-          const jsonData = await dataResponse.json();
-          if (!dataResponse.ok) {
-            throw new Error(jsonData.error || "Data fetch failed");
-          }
-
-          // 3d. Transform JSON response to match our schema
-          const tableData = jsonData.map((item) => ({
-            deviceId: item.device_id || "",
-            locationName: item.location_name || "",
-            count: item.count || 0,
-            timestamp: item.timestamp || new Date().toISOString(),
-          }));
-
-          // 3e. Send rows back to Tableau
-          table.appendRows(tableData);
-          doneCallback();
-        } catch (err) {
-          console.error("Error fetching data:", err);
-          // Even if there's an error, we call doneCallback() so Tableau can proceed
-          doneCallback();
-        }
-      };
-
-      /**
-       * 4. Register our connector with Tableau
-       */
-      tableau.registerConnector(myConnector);
-
-      /**************************************************
-       * 5. "Init" code to handle user input and trigger data collection
-       **************************************************/
-      function submitWDC() {
-        // We read client_id and client_secret from the HTML form
-        const clientIdInput = document.getElementById("clientId").value;
-        const clientSecretInput = document.getElementById("clientSecret").value;
-
-        // For convenience, you can store credentials in:
-        // - tableau.username / tableau.password
-        // - localStorage
-        // - or a global variable, etc.
-
-        // We'll store client_id in "tableau.password" (just as an example).
-        // We can’t store both in the same property because WDC only offers
-        // two secure fields: tableau.username / tableau.password.
-        // So we’ll put client_secret in localStorage for demonstration.
-        // This is not recommended for production security!
-        tableau.password = clientIdInput;
-        window.localStorage.setItem("client_secret", clientSecretInput);
-
-        // Give our connection a user-friendly name
-        tableau.connectionName = "Sensource WDC via Client Credentials";
-        tableau.submit(); // This calls getSchema -> getData
-      }
-    </script>
-  </head>
-
-  <body>
-    <h1>Sensource WDC with Client Credentials</h1>
-    <p>Enter your client credentials below, then click "Get Data".</p>
-
-    <div style="margin-bottom: 1rem;">
-      <label for="clientId">Client ID:</label>
-      <input type="text" id="clientId" placeholder="Enter Client ID" />
-    </div>
-
-    <div style="margin-bottom: 1rem;">
-      <label for="clientSecret">Client Secret:</label>
-      <input type="password" id="clientSecret" placeholder="Enter Client Secret" />
-    </div>
-
-    <button onclick="submitWDC()">Get Data</button>
-  </body>
+        <br>
+        <input type="submit" value="Download CSV">
+    </form>
+</body>
 </html>
